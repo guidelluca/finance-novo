@@ -18,7 +18,8 @@ function readStoredPreference(): ThemePreference {
   if (typeof window === 'undefined') return 'system'
   const raw = window.localStorage.getItem(STORAGE_KEY)
   if (raw === 'light' || raw === 'dark' || raw === 'system') return raw
-  return 'system'
+  // design Lima: claro por padrão (o botão sol/lua no topo troca)
+  return 'light'
 }
 
 function systemTheme(): ResolvedTheme {

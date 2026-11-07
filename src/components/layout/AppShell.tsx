@@ -7,6 +7,7 @@ import {
   List,
   LogOut,
   MoreHorizontal,
+  Plus,
   Moon,
   PiggyBank,
   Settings,
@@ -26,15 +27,16 @@ import { cn } from '@/lib/utils'
 
 type NavItem = { to: string; icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; label: string }
 
+/** Barra de baixo (design Lima): o item /import vira o botão "+" central. */
 const primaryNav: NavItem[] = [
   { to: '/', icon: Home, label: 'Início' },
   { to: '/mes', icon: CalendarDays, label: 'Mês' },
-  { to: '/cards', icon: CreditCard, label: 'Cartões' },
+  { to: '/import', icon: Upload, label: 'Adicionar' },
   { to: '/transactions', icon: List, label: 'Extrato' },
-  { to: '/import', icon: Upload, label: 'Importar' },
 ]
 
 const secondaryNav: NavItem[] = [
+  { to: '/cards', icon: CreditCard, label: 'Cartões' },
   { to: '/analysis', icon: Sparkles, label: 'Análise' },
   { to: '/savings', icon: PiggyBank, label: 'Poupança' },
   { to: '/categories', icon: FolderTree, label: 'Categorias' },
@@ -65,7 +67,13 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-background pb-[calc(4.5rem+env(safe-area-inset-bottom))]">
-      <header className="sticky top-0 z-40 flex items-center justify-end gap-2 border-b border-border bg-background/90 px-4 py-2 backdrop-blur-md pt-[max(0.5rem,env(safe-area-inset-top))]">
+      <header className="sticky top-0 z-40 flex items-center justify-end gap-2 bg-background/90 px-4 py-2 backdrop-blur-md pt-[max(0.5rem,env(safe-area-inset-top))]">
+        <span className="mr-auto flex items-center gap-2 font-display text-lg font-bold tracking-tight">
+          <span className="flex size-7 items-center justify-center rounded-lg bg-ink text-sm text-lime" aria-hidden>
+            F
+          </span>
+          Finance
+        </span>
         <Button
           type="button"
           variant="ghost"
@@ -106,7 +114,7 @@ export function AppShell() {
             role="dialog"
             aria-modal="true"
           >
-            <div className="animate-[fadeUp_150ms_ease-out] overflow-hidden rounded-2xl border border-border bg-surface-elevated/95 shadow-xl backdrop-blur-md">
+            <div className="animate-[fadeUp_150ms_ease-out] overflow-hidden rounded-3xl border border-border bg-surface shadow-xl">
               <ul className="grid grid-cols-2 gap-1 p-2">
                 {secondaryNav.map(({ to, icon: Icon, label }) => (
                   <li key={to}>
@@ -117,8 +125,8 @@ export function AppShell() {
                         cn(
                           'flex items-center gap-3 rounded-xl border border-transparent px-3 py-3 text-sm font-medium transition',
                           isActive
-                            ? 'border-accent/40 bg-accent/10 text-accent'
-                            : 'text-foreground/80 hover:bg-surface',
+                            ? 'bg-lime text-ink'
+                            : 'text-foreground/80 hover:bg-background',
                         )
                       }
                     >
@@ -134,39 +142,74 @@ export function AppShell() {
       ) : null}
 
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]"
         aria-label="Principal"
       >
-        <ul className="mx-auto flex max-w-lg items-stretch justify-between gap-0.5 px-1 py-2">
-          {primaryNav.map(({ to, icon: Icon, label }) => (
-            <li key={to} className="min-w-0 flex-1">
-              <NavLink
-                to={to}
-                end={to === '/'}
-                className={({ isActive }) =>
-                  cn(
-                    'flex min-w-0 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[10px] font-semibold leading-tight text-muted transition-colors',
-                    isActive && 'text-accent',
-                  )
-                }
-              >
-                <Icon className="size-5" strokeWidth={1.75} />
-                {label}
-              </NavLink>
-            </li>
-          ))}
+        <ul className="mx-auto flex max-w-lg items-start justify-between gap-0.5 px-1 pb-1 pt-2">
+          {primaryNav.map(({ to, icon: Icon, label }) =>
+            to === '/import' ? (
+              <li key={to} className="flex min-w-0 flex-1 justify-center">
+                <NavLink
+                  to={to}
+                  aria-label="Adicionar ou importar"
+                  className={({ isActive }) =>
+                    cn(
+                      '-mt-4 flex size-14 items-center justify-center rounded-[20px] shadow-lg transition-transform active:scale-95',
+                      isActive ? 'bg-lime text-ink' : 'bg-ink text-lime',
+                    )
+                  }
+                >
+                  <Plus className="size-6" strokeWidth={2.2} />
+                </NavLink>
+              </li>
+            ) : (
+              <li key={to} className="min-w-0 flex-1">
+                <NavLink
+                  to={to}
+                  end={to === '/'}
+                  className={({ isActive }) =>
+                    cn(
+                      'group flex min-w-0 flex-col items-center gap-1 py-0.5 text-[11px] font-medium leading-tight text-muted transition-colors',
+                      isActive && 'font-semibold text-foreground',
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <span
+                        className={cn(
+                          'flex h-[30px] w-[52px] items-center justify-center rounded-full transition-colors',
+                          isActive && 'bg-lime text-ink',
+                        )}
+                      >
+                        <Icon className="size-5" strokeWidth={1.8} />
+                      </span>
+                      {label}
+                    </>
+                  )}
+                </NavLink>
+              </li>
+            ),
+          )}
           <li className="min-w-0 flex-1">
             <button
               type="button"
               onClick={() => setMoreOpen((o) => !o)}
               className={cn(
-                'flex w-full min-w-0 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[10px] font-semibold leading-tight text-muted transition-colors',
-                (moreOpen || isSecondaryActive) && 'text-accent',
+                'flex w-full min-w-0 flex-col items-center gap-1 py-0.5 text-[11px] font-medium leading-tight text-muted transition-colors',
+                (moreOpen || isSecondaryActive) && 'font-semibold text-foreground',
               )}
               aria-expanded={moreOpen}
               aria-label="Mais opções"
             >
-              <MoreHorizontal className="size-5" strokeWidth={1.75} />
+              <span
+                className={cn(
+                  'flex h-[30px] w-[52px] items-center justify-center rounded-full transition-colors',
+                  (moreOpen || isSecondaryActive) && 'bg-lime text-ink',
+                )}
+              >
+                <MoreHorizontal className="size-5" strokeWidth={1.8} />
+              </span>
               Mais
             </button>
           </li>

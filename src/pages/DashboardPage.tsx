@@ -37,8 +37,8 @@ import { supabase } from '@/lib/supabase'
 import type { Category, Transaction } from '@/types/database'
 import { cn } from '@/lib/utils'
 
-const COLORS_DARK = ['#10b981', '#34d399', '#6ee7b7', '#059669', '#047857', '#0d9488', '#14b8a6', '#2dd4bf']
-const COLORS_LIGHT = ['#059669', '#10b981', '#047857', '#0d9488', '#0f766e', '#0f766e', '#14b8a6', '#2dd4bf']
+const COLORS_DARK = ['#C8F169', '#7DE2D1', '#FFC861', '#B9A5FF', '#F28C6B', '#6FA8FF', '#E2E4DC', '#9BD15B']
+const COLORS_LIGHT = ['#14161A', '#2F5BD3', '#4D7C0F', '#C2410C', '#7C3AED', '#0E7490', '#B45309', '#5E636B']
 
 type Tx = Transaction & { categories: Pick<Category, 'name'> | null }
 
@@ -346,7 +346,7 @@ export function DashboardPage() {
         className={cn(
           'flex-1 rounded-lg px-3 py-2 text-xs font-medium transition sm:text-sm',
           dashboardMode === 'overview'
-            ? 'bg-accent text-[#04120c] shadow-sm'
+            ? 'bg-primary text-primary-fg shadow-sm'
             : 'text-muted hover:text-foreground',
         )}
         onClick={() => setDashboardMode('overview')}
@@ -358,7 +358,7 @@ export function DashboardPage() {
         className={cn(
           'flex-1 rounded-lg px-3 py-2 text-xs font-medium transition sm:text-sm',
           dashboardMode === 'month'
-            ? 'bg-accent text-[#04120c] shadow-sm'
+            ? 'bg-primary text-primary-fg shadow-sm'
             : 'text-muted hover:text-foreground',
         )}
         onClick={() => setDashboardMode('month')}
@@ -421,59 +421,45 @@ export function DashboardPage() {
           {modeToggle}
         </header>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Card className="min-w-0 overflow-hidden">
-            <CardHeader className="min-w-0 pb-2">
-              <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted">
-                Entradas (total)
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="min-w-0 pt-2">
-              <p
-                className="font-mono text-base tabular-nums leading-snug tracking-tight text-accent sm:text-lg md:text-xl"
-                title={formatBRLFromCents(overviewTotals.income)}
-              >
-                {formatBRLFromCents(overviewTotals.income)}
+        {/* Cartão escuro (design Lima): saldo em destaque, entradas e saídas abaixo */}
+        <section className="rounded-[28px] bg-ink p-5 text-[#f2f3ee] sm:p-6" aria-label="Totais do período">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1.5">
+              <p className="text-[13px] text-[#b9bdb4]">
+                {overviewTotals.net >= 0 ? 'Saldo acumulado no período' : 'Déficit acumulado no período'}
               </p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 overflow-hidden">
-            <CardHeader className="min-w-0 pb-2">
-              <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted">
-                Saídas (total)
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="min-w-0 pt-2">
               <p
-                className="font-mono text-base tabular-nums leading-snug tracking-tight text-danger sm:text-lg md:text-xl"
-                title={formatBRLFromCents(overviewTotals.expense)}
-              >
-                {formatBRLFromCents(overviewTotals.expense)}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 overflow-hidden">
-            <CardHeader className="min-w-0 pb-2">
-              <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted">
-                Saldo acumulado (total)
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="min-w-0 pt-2">
-              <p
-                className={cn(
-                  'font-mono text-lg font-semibold tabular-nums leading-snug tracking-tight sm:text-xl md:text-2xl',
-                  overviewTotals.net >= 0 ? 'text-accent' : 'text-danger',
-                )}
+                className="font-display text-[34px] font-bold leading-none tracking-tight sm:text-[40px]"
                 title={formatBRLFromCents(Math.abs(overviewTotals.net))}
               >
+                {overviewTotals.net < 0 ? '−' : ''}
                 {formatBRLFromCents(Math.abs(overviewTotals.net))}
               </p>
-              {overviewTotals.net < 0 ? (
-                <p className="mt-1 text-xs font-normal text-muted">Déficit global no período</p>
-              ) : null}
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+            <span
+              className={cn(
+                'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
+                overviewTotals.net >= 0 ? 'bg-lime text-ink' : 'bg-[#f28c6b] text-ink',
+              )}
+            >
+              {allMonthsSeries.length} {allMonthsSeries.length === 1 ? 'mês' : 'meses'}
+            </span>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-2.5">
+            <div className="min-w-0 rounded-2xl bg-[#23262b] px-3.5 py-3">
+              <p className="text-xs text-[#b9bdb4]">Entrou</p>
+              <p className="truncate font-mono text-[15px] font-semibold tabular-nums sm:text-base" title={formatBRLFromCents(overviewTotals.income)}>
+                {formatBRLFromCents(overviewTotals.income)}
+              </p>
+            </div>
+            <div className="min-w-0 rounded-2xl bg-[#23262b] px-3.5 py-3">
+              <p className="text-xs text-[#b9bdb4]">Saiu</p>
+              <p className="truncate font-mono text-[15px] font-semibold tabular-nums sm:text-base" title={formatBRLFromCents(overviewTotals.expense)}>
+                {formatBRLFromCents(overviewTotals.expense)}
+              </p>
+            </div>
+          </div>
+        </section>
 
         <MonthBudgetCard
           userId={user.id}
@@ -756,63 +742,45 @@ export function DashboardPage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <Link
-          to={`/transactions?kind=credit&month=${monthSelectValue}`}
-          className="block min-w-0 rounded-2xl border border-border bg-surface-elevated/70 p-4 shadow-sm transition hover:border-emerald-400/40 hover:bg-surface-elevated"
-          aria-label="Ver entradas do mês"
-        >
-          <p className="text-xs font-medium uppercase tracking-wider text-muted">Entradas</p>
-          <p
-            className="mt-2 font-mono text-base tabular-nums leading-snug tracking-tight text-accent sm:text-lg md:text-xl"
-            title={formatBRLFromCents(stats.income)}
-          >
-            {formatBRLFromCents(stats.income)}
-          </p>
-          <p className="mt-1 text-[10px] uppercase tracking-wide text-muted/70">
-            Toque para ver
-          </p>
-        </Link>
-        <Link
-          to={`/transactions?kind=debit&month=${monthSelectValue}`}
-          className="block min-w-0 rounded-2xl border border-border bg-surface-elevated/70 p-4 shadow-sm transition hover:border-red-400/40 hover:bg-surface-elevated"
-          aria-label="Ver saídas do mês"
-        >
-          <p className="text-xs font-medium uppercase tracking-wider text-muted">Saídas</p>
-          <p
-            className="mt-2 font-mono text-base tabular-nums leading-snug tracking-tight text-danger sm:text-lg md:text-xl"
-            title={formatBRLFromCents(stats.expense)}
-          >
-            {formatBRLFromCents(stats.expense)}
-          </p>
-          <p className="mt-1 text-[10px] uppercase tracking-wide text-muted/70">
-            Toque para ver
-          </p>
-        </Link>
+      {/* Cartão escuro (design Lima) do mês */}
+      <section className="rounded-[28px] bg-ink p-5 text-[#f2f3ee] sm:p-6" aria-label="Resumo do mês">
         <Link
           to={`/transactions?month=${monthSelectValue}`}
-          className="block min-w-0 rounded-2xl border border-border bg-surface-elevated/70 p-4 shadow-sm transition hover:border-accent/40 hover:bg-surface-elevated"
+          className="block rounded-2xl focus-visible:outline-lime"
           aria-label="Ver todos os lançamentos do mês"
         >
-          <p className="text-xs font-medium uppercase tracking-wider text-muted">Saldo do mês</p>
+          <p className="text-[13px] text-[#b9bdb4]">{stats.net >= 0 ? 'Sobrou no mês' : 'Faltou no mês'}</p>
           <p
-            className={cn(
-              'mt-2 font-mono text-lg font-semibold tabular-nums leading-snug tracking-tight sm:text-xl md:text-2xl',
-              stats.net >= 0 ? 'text-accent' : 'text-danger',
-            )}
+            className="mt-1.5 font-display text-[34px] font-bold leading-none tracking-tight sm:text-[40px]"
             title={`${formatBRLFromCents(Math.abs(stats.net))}${stats.net < 0 ? ' (déficit)' : ''}`}
           >
+            {stats.net < 0 ? '−' : ''}
             {formatBRLFromCents(Math.abs(stats.net))}
           </p>
-          {stats.net < 0 ? (
-            <p className="mt-1 text-xs font-normal text-muted">Déficit no mês</p>
-          ) : (
-            <p className="mt-1 text-[10px] uppercase tracking-wide text-muted/70">
-              Toque para ver
-            </p>
-          )}
         </Link>
-      </div>
+        <div className="mt-5 grid grid-cols-2 gap-2.5">
+          <Link
+            to={`/transactions?kind=credit&month=${monthSelectValue}`}
+            className="min-w-0 rounded-2xl bg-[#23262b] px-3.5 py-3 transition hover:bg-[#2c3036]"
+            aria-label="Ver entradas do mês"
+          >
+            <p className="text-xs text-[#b9bdb4]">Entrou</p>
+            <p className="truncate font-mono text-[15px] font-semibold tabular-nums sm:text-base" title={formatBRLFromCents(stats.income)}>
+              {formatBRLFromCents(stats.income)}
+            </p>
+          </Link>
+          <Link
+            to={`/transactions?kind=debit&month=${monthSelectValue}`}
+            className="min-w-0 rounded-2xl bg-[#23262b] px-3.5 py-3 transition hover:bg-[#2c3036]"
+            aria-label="Ver saídas do mês"
+          >
+            <p className="text-xs text-[#b9bdb4]">Saiu</p>
+            <p className="truncate font-mono text-[15px] font-semibold tabular-nums sm:text-base" title={formatBRLFromCents(stats.expense)}>
+              {formatBRLFromCents(stats.expense)}
+            </p>
+          </Link>
+        </div>
+      </section>
 
       <MonthBudgetCard
         userId={user.id}

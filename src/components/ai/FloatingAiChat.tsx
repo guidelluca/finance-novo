@@ -90,7 +90,7 @@ export function FloatingAiChat() {
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'fixed z-[60] flex size-14 items-center justify-center rounded-full border border-border bg-accent text-[#04120c] shadow-[var(--shadow-card)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+          'fixed z-[60] flex size-14 items-center justify-center rounded-full border border-border bg-primary text-primary-fg shadow-[var(--shadow-card)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
           open && 'pointer-events-none opacity-0',
         )}
         style={{ right: 'max(1rem, env(safe-area-inset-right))', bottom: bottomOffset }}

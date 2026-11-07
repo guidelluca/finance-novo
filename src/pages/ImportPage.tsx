@@ -1076,7 +1076,7 @@ export function ImportPage() {
                       onClick={() => updateDraft(d.tempId, { kind: d.kind === 'credit' ? 'debit' : 'credit' })}
                       className={cn(
                         'ml-auto h-9 rounded-lg px-2 text-xs font-semibold',
-                        d.kind === 'credit' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/10 text-red-300',
+                        d.kind === 'credit' ? 'bg-positive/15 text-positive' : 'bg-danger/10 text-danger',
                       )}
                     >
                       {d.kind === 'credit' ? '+ Entrada' : '− Saída'}

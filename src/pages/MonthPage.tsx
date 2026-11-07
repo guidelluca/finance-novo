@@ -266,7 +266,7 @@ export function MonthPage() {
             <Card>
               <CardContent className="p-3">
                 <p className="text-xs text-muted">Entrou</p>
-                <p className="font-mono text-base font-semibold tabular-nums text-emerald-400">
+                <p className="font-mono text-base font-semibold tabular-nums text-positive">
                   {formatBRLFromCents(totals.incomeCents)}
                 </p>
               </CardContent>
@@ -488,7 +488,7 @@ export function MonthPage() {
                                 </option>
                               ))}
                             </select>
-                            <span className={cn('w-20 shrink-0 text-right font-mono tabular-nums', t.kind === 'credit' && 'text-emerald-400')}>
+                            <span className={cn('w-20 shrink-0 text-right font-mono tabular-nums', t.kind === 'credit' && 'text-positive')}>
                               {t.kind === 'credit' ? '−' : ''}
                               {formatBRLFromCents(t.amountCents)}
                             </span>
@@ -513,7 +513,7 @@ export function MonthPage() {
                   <div key={a.account} className="flex justify-between gap-2">
                     <span>{a.account}</span>
                     <span className="font-mono tabular-nums text-muted">
-                      {a.incomeCents ? <span className="text-emerald-400">+{formatBRLFromCents(a.incomeCents)} </span> : null}
+                      {a.incomeCents ? <span className="text-positive">+{formatBRLFromCents(a.incomeCents)} </span> : null}
                       −{formatBRLFromCents(a.expenseCents)}
                     </span>
                   </div>

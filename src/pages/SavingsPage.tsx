@@ -270,7 +270,7 @@ export function SavingsPage() {
           type="button"
           className={cn(
             'flex-1 rounded-lg px-3 py-2 text-xs font-medium sm:text-sm',
-            tab === 'boxes' ? 'bg-accent text-[#04120c] shadow-sm' : 'text-muted',
+            tab === 'boxes' ? 'bg-primary text-primary-fg shadow-sm' : 'text-muted',
           )}
           onClick={() => setTab('boxes')}
         >
@@ -280,7 +280,7 @@ export function SavingsPage() {
           type="button"
           className={cn(
             'flex-1 rounded-lg px-3 py-2 text-xs font-medium sm:text-sm',
-            tab === 'ledger' ? 'bg-accent text-[#04120c] shadow-sm' : 'text-muted',
+            tab === 'ledger' ? 'bg-primary text-primary-fg shadow-sm' : 'text-muted',
           )}
           onClick={() => setTab('ledger')}
         >
@@ -374,7 +374,7 @@ export function SavingsPage() {
                     type="button"
                     className={cn(
                       'flex-1 rounded-lg py-2 text-xs font-medium sm:text-sm',
-                      entryDirection === 'in' ? 'bg-accent text-[#04120c]' : 'text-muted',
+                      entryDirection === 'in' ? 'bg-primary text-primary-fg' : 'text-muted',
                     )}
                     onClick={() => setEntryDirection('in')}
                   >

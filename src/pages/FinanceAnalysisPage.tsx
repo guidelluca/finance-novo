@@ -233,7 +233,7 @@ export function FinanceAnalysisPage() {
           type="button"
           className={cn(
             'flex-1 rounded-lg px-3 py-2 text-xs font-medium sm:text-sm',
-            tab === 'overview' ? 'bg-accent text-[#04120c] shadow-sm' : 'text-muted',
+            tab === 'overview' ? 'bg-primary text-primary-fg shadow-sm' : 'text-muted',
           )}
           onClick={() => setTab('overview')}
         >
@@ -243,7 +243,7 @@ export function FinanceAnalysisPage() {
           type="button"
           className={cn(
             'flex-1 rounded-lg px-3 py-2 text-xs font-medium sm:text-sm',
-            tab === 'month' ? 'bg-accent text-[#04120c] shadow-sm' : 'text-muted',
+            tab === 'month' ? 'bg-primary text-primary-fg shadow-sm' : 'text-muted',
           )}
           onClick={() => setTab('month')}
         >

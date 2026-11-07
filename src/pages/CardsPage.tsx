@@ -525,7 +525,7 @@ function CardRow({ card, txs, open, onToggle, openCycleKey, setOpenCycleKey, onE
                   <span
                     className={cn(
                       'font-mono text-sm tabular-nums',
-                      t.kind === 'credit' ? 'text-emerald-400' : 'text-red-300',
+                      t.kind === 'credit' ? 'text-positive' : 'text-danger',
                     )}
                   >
                     {t.kind === 'credit' ? '+' : '−'}

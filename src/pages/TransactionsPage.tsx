@@ -456,7 +456,7 @@ export function TransactionsPage() {
               <strong
                 className={cn(
                   'font-mono tabular-nums',
-                  kindFilter === 'credit' ? 'text-emerald-400' : 'text-red-400',
+                  kindFilter === 'credit' ? 'text-positive' : 'text-danger',
                 )}
               >
                 {kindFilter === 'credit' ? '+' : '−'}
@@ -820,7 +820,7 @@ export function TransactionsPage() {
                     <span
                       className={cn(
                         'font-mono text-sm tabular-nums',
-                        signedAmount(t) >= 0 ? 'text-emerald-400' : 'text-red-400',
+                        signedAmount(t) >= 0 ? 'text-positive' : 'text-danger',
                       )}
                     >
                       {formatBRLFromCents(signedAmount(t))}

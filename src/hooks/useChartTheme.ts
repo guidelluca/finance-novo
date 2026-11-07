@@ -29,25 +29,25 @@ export function useChartTheme(): ChartTheme {
   if (isDark) {
     return {
       isDark: true,
-      grid: '#243044',
-      axis: '#8b9cb5',
-      tooltipBg: '#111827',
-      tooltipBorder: '#243044',
-      tooltipColor: '#e8edf5',
-      emerald: '#34d399',
-      red: '#f87171',
-      accentSoft: 'rgba(52, 211, 153, 0.25)',
+      grid: '#2b2e34',
+      axis: '#a0a5ac',
+      tooltipBg: '#17191c',
+      tooltipBorder: '#2b2e34',
+      tooltipColor: '#eef0ea',
+      emerald: '#c8f169',
+      red: '#f28c6b',
+      accentSoft: 'rgba(200, 241, 105, 0.22)',
     }
   }
   return {
     isDark: false,
-    grid: '#e2e8f0',
-    axis: '#64748b',
+    grid: '#e2e4dc',
+    axis: '#5e636b',
     tooltipBg: '#ffffff',
-    tooltipBorder: '#e2e8f0',
-    tooltipColor: '#0f172a',
-    emerald: '#059669',
-    red: '#dc2626',
-    accentSoft: 'rgba(5, 150, 105, 0.15)',
+    tooltipBorder: '#e2e4dc',
+    tooltipColor: '#14161a',
+    emerald: '#14161a',
+    red: '#c2410c',
+    accentSoft: 'rgba(200, 241, 105, 0.45)',
   }
 }
