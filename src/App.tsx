@@ -19,6 +19,7 @@ import { RulesPage } from '@/pages/RulesPage'
 import { SavingsPage } from '@/pages/SavingsPage'
 import { SetupPage } from '@/pages/SetupPage'
 import { TransactionsPage } from '@/pages/TransactionsPage'
+import { ExtratoPage } from '@/pages/ExtratoPage'
 
 function RequireSupabase() {
   if (!isSupabaseConfigured) return <Navigate to="/setup" replace />
@@ -61,7 +62,8 @@ function AppRoutes() {
             <Route path="analysis" element={<FinanceAnalysisPage />} />
             <Route path="cards" element={<CardsPage />} />
             <Route path="savings" element={<SavingsPage />} />
-            <Route path="transactions" element={<TransactionsPage />} />
+            <Route path="transactions" element={<ExtratoPage />} />
+            <Route path="transactions/avancado" element={<TransactionsPage />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="rules" element={<RulesPage />} />

@@ -36,6 +36,7 @@ import { learnRules } from '@/lib/learnRules'
 import type { ParserId, TransactionDraft } from '@/parsers/types'
 import type { Category, ImportBatch, ImportFile, Rule } from '@/types/database'
 import { cn } from '@/lib/utils'
+import { Link } from 'react-router-dom'
 
 const PARSER_OPTIONS: { id: ParserId; label: string }[] = [
   { id: 'screenshot_ai_v1', label: 'Print / Foto — extraído por IA' },
@@ -727,18 +728,72 @@ export function ImportPage() {
 
   return (
     <div className="space-y-6 pb-24">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Importar</h1>
-        <p className="text-sm text-muted">
-          PDF, CSV ou TSV. <strong>Finance PWA — CSV</strong>: colunas{' '}
-          <code className="text-xs">data</code>, <code className="text-xs">descricao</code>,{' '}
-          <code className="text-xs">valor</code>, <code className="text-xs">tipo</code> (C/D ou entrada/saída);
-          opcionais <code className="text-xs">categoria</code> (cria categorias em falta) e{' '}
-          <code className="text-xs">conta</code>. Separador <strong>,</strong> ou <strong>;</strong> (detetado
-          automaticamente). Planilha Nubank: Data, Descrição, Entrada/Saída… Itaú CSV costuma usar{' '}
-          <strong>;</strong>.
-        </p>
+      <header className="space-y-3.5">
+        <h1 className="text-[30px] font-bold tracking-tight">Adicionar</h1>
+        <div className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-surface p-1 text-sm" role="tablist">
+          <span role="tab" aria-selected="true" className="rounded-xl bg-primary py-2.5 text-center font-semibold text-primary-fg">
+            Importar extrato
+          </span>
+          <Link to="/transactions?new=1" role="tab" aria-selected="false" className="rounded-xl py-2.5 text-center font-medium text-muted">
+            Lançar à mão
+          </Link>
+        </div>
+        <ol className="flex items-center gap-2 text-[13px]" aria-label="Etapas">
+          {(['Arquivo', 'Revisar', 'Pronto'] as const).map((label, i) => {
+            const current = step === 'review' ? 1 : saveNotice ? 2 : 0
+            const state = i < current ? 'done' : i === current ? 'now' : 'next'
+            return (
+              <li key={label} className="flex flex-1 items-center gap-2" aria-current={state === 'now' ? 'step' : undefined}>
+                <span
+                  className={cn(
+                    'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+                    state === 'now' && 'bg-ink text-lime',
+                    state === 'done' && 'bg-lime text-ink',
+                    state === 'next' && 'border border-border text-muted',
+                  )}
+                >
+                  {state === 'done' ? '✓' : i + 1}
+                </span>
+                <span className={cn(state === 'next' ? 'text-muted' : 'font-semibold')}>{label}</span>
+                {i < 2 ? <span className="h-px flex-1 bg-border" aria-hidden /> : null}
+              </li>
+            )
+          })}
+        </ol>
+        {step === 'pick' ? (
+          <details className="rounded-2xl border border-border bg-surface px-3.5 py-2.5 text-sm text-muted">
+            <summary className="cursor-pointer font-medium text-foreground">Formatos aceitos</summary>
+            <p className="mt-2">
+              Prints do app do banco, faturas em PDF (Itaú, PicPay e outros), extratos em PDF, CSV ou TSV.{' '}
+              <strong>CSV do Finance</strong>: colunas <code className="text-xs">data</code>,{' '}
+              <code className="text-xs">descricao</code>, <code className="text-xs">valor</code>,{' '}
+              <code className="text-xs">tipo</code> (C/D ou entrada/saída); opcionais{' '}
+              <code className="text-xs">categoria</code> e <code className="text-xs">conta</code>. Separador{' '}
+              <strong>,</strong> ou <strong>;</strong> detectado automaticamente.
+            </p>
+          </details>
+        ) : null}
       </header>
+
+      {step === 'review' ? (
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          {[
+            { label: 'Encontradas', value: drafts.length, tone: '' },
+            { label: 'Já existiam / desmarcadas', value: drafts.filter((d) => d.excluded).length, tone: '' },
+            { label: 'Categorizadas', value: drafts.filter((d) => !d.excluded && d.categoryId).length, tone: 'text-positive' },
+            {
+              label: 'Precisam de você',
+              value: drafts.filter((d) => !d.excluded && (!d.categoryId || (d.reviewFlags?.length ?? 0) > 0)).length,
+              tone: 'text-warning',
+            },
+          ].map((b) => (
+            <div key={b.label} className="rounded-[18px] border border-border bg-surface px-3.5 py-3">
+              <p className={cn('font-display text-2xl font-bold tabular-nums', b.tone)}>{b.value}</p>
+              <p className="text-xs text-muted">{b.label}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {step === 'pick' ? (
         <Card className="border-accent/30 bg-accent-muted/20">
