@@ -1,6 +1,6 @@
 # Publica o app no GitHub Pages a cada push na main (igual ao Tocah).
 # Configure em Settings → Secrets and variables → Actions:
-#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY  (obrigatórios)
+#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY  (opcionais: o padrão é o projeto "finance")
 #   VITE_GEMINI_API_KEY, VITE_GROQ_API_KEY     (opcionais — só para "ler print com IA")
 name: Deploy GitHub Pages
 
@@ -35,8 +35,10 @@ jobs:
       - name: Build
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Projeto Supabase "finance". A chave publishable é pública por design (vai no JS do app);
+          # a proteção dos dados é o RLS. Um secret com o mesmo nome, se existir, tem prioridade.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://dmabtnbdxspvoingwgdq.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'sb_publishable_3NBXCtdbAwViX2Y2s7hZug_EZULxj3l' }}
           VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
           VITE_GROQ_API_KEY: ${{ secrets.VITE_GROQ_API_KEY }}
         run: npm run build
