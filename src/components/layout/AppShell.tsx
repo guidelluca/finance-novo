@@ -1,12 +1,14 @@
 import {
+  BarChart3,
   CalendarDays,
+  PieChart,
+  Target,
   Fingerprint,
   CreditCard,
   FolderTree,
   Home,
   List,
   LogOut,
-  MoreHorizontal,
   Plus,
   Moon,
   PiggyBank,
@@ -30,14 +32,18 @@ type NavItem = { to: string; icon: React.ComponentType<{ className?: string; str
 /** Barra de baixo (design Lima): o item /import vira o botão "+" central. */
 const primaryNav: NavItem[] = [
   { to: '/', icon: Home, label: 'Início' },
-  { to: '/mes', icon: CalendarDays, label: 'Mês' },
-  { to: '/import', icon: Upload, label: 'Adicionar' },
   { to: '/transactions', icon: List, label: 'Extrato' },
+  { to: '/import', icon: Upload, label: 'Adicionar' },
+  { to: '/orcamento', icon: PieChart, label: 'Orçamento' },
+  { to: '/metas', icon: Target, label: 'Metas' },
 ]
 
+/** Menu do avatar (topo) */
 const secondaryNav: NavItem[] = [
+  { to: '/mes', icon: CalendarDays, label: 'Mês consolidado' },
+  { to: '/historico', icon: BarChart3, label: 'Visão geral' },
   { to: '/cards', icon: CreditCard, label: 'Cartões' },
-  { to: '/analysis', icon: Sparkles, label: 'Análise' },
+  { to: '/analysis', icon: Sparkles, label: 'Análise IA' },
   { to: '/savings', icon: PiggyBank, label: 'Poupança' },
   { to: '/categories', icon: FolderTree, label: 'Categorias' },
   { to: '/rules', icon: Settings, label: 'Regras' },
@@ -74,27 +80,18 @@ export function AppShell() {
           </span>
           Finance
         </span>
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
-          className="text-muted"
-          onClick={toggle}
-          aria-label={resolved === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
-          title={resolved === 'dark' ? 'Modo claro' : 'Modo escuro'}
+          onClick={() => setMoreOpen((o) => !o)}
+          aria-expanded={moreOpen}
+          aria-label="Menu e ajustes"
+          className={cn(
+            'flex size-11 items-center justify-center rounded-[14px] bg-ink font-display text-base font-bold text-lime transition',
+            (moreOpen || isSecondaryActive) && 'ring-2 ring-lime ring-offset-2 ring-offset-background',
+          )}
         >
-          {resolved === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="text-muted"
-          onClick={() => void signOut()}
-        >
-          <LogOut className="size-4" />
-          Sair
-        </Button>
+          {(user?.email ?? 'F').charAt(0).toUpperCase()}
+        </button>
       </header>
       <main className="mx-auto w-full max-w-lg flex-1 px-4 pt-4">
         <PasskeyPrompt />
@@ -110,7 +107,7 @@ export function AppShell() {
             aria-label="Fechar menu"
           />
           <div
-            className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 mx-auto max-w-lg px-3 pb-2"
+            className="fixed inset-x-0 top-[calc(4rem+env(safe-area-inset-top))] z-50 mx-auto max-w-lg px-3"
             role="dialog"
             aria-modal="true"
           >
@@ -136,6 +133,16 @@ export function AppShell() {
                   </li>
                 ))}
               </ul>
+              <div className="flex gap-2 border-t border-border p-2">
+                <Button type="button" variant="ghost" className="flex-1 justify-start" onClick={toggle}>
+                  {resolved === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+                  {resolved === 'dark' ? 'Modo claro' : 'Modo escuro'}
+                </Button>
+                <Button type="button" variant="ghost" className="flex-1 justify-start text-danger" onClick={() => void signOut()}>
+                  <LogOut className="size-4" />
+                  Sair
+                </Button>
+              </div>
             </div>
           </div>
         </>
@@ -191,28 +198,6 @@ export function AppShell() {
               </li>
             ),
           )}
-          <li className="min-w-0 flex-1">
-            <button
-              type="button"
-              onClick={() => setMoreOpen((o) => !o)}
-              className={cn(
-                'flex w-full min-w-0 flex-col items-center gap-1 py-0.5 text-[11px] font-medium leading-tight text-muted transition-colors',
-                (moreOpen || isSecondaryActive) && 'font-semibold text-foreground',
-              )}
-              aria-expanded={moreOpen}
-              aria-label="Mais opções"
-            >
-              <span
-                className={cn(
-                  'flex h-[30px] w-[52px] items-center justify-center rounded-full transition-colors',
-                  (moreOpen || isSecondaryActive) && 'bg-lime text-ink',
-                )}
-              >
-                <MoreHorizontal className="size-5" strokeWidth={1.8} />
-              </span>
-              Mais
-            </button>
-          </li>
         </ul>
       </nav>
       <FloatingAiChat />

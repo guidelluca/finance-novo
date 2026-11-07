@@ -81,7 +81,7 @@ export function TransactionsPage() {
   const [cards, setCards] = useState<CreditCard[]>([])
   const [rules, setRules] = useState<Rule[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
+  const [showForm, setShowForm] = useState(() => params.get('new') === '1')
   const [formError, setFormError] = useState<string | null>(null)
   const [form, setForm] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),

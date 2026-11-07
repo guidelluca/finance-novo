@@ -11,6 +11,9 @@ import { FinanceAnalysisPage } from '@/pages/FinanceAnalysisPage'
 import { ImportPage } from '@/pages/ImportPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { MonthPage } from '@/pages/MonthPage'
+import { HomePage } from '@/pages/HomePage'
+import { BudgetPage } from '@/pages/BudgetPage'
+import { GoalsPage } from '@/pages/GoalsPage'
 import { SecurityPage } from '@/pages/SecurityPage'
 import { RulesPage } from '@/pages/RulesPage'
 import { SavingsPage } from '@/pages/SavingsPage'
@@ -49,7 +52,10 @@ function AppRoutes() {
               </FinanceAiProvider>
             }
           >
-            <Route index element={<DashboardPage />} />
+            <Route index element={<HomePage />} />
+            <Route path="historico" element={<DashboardPage />} />
+            <Route path="orcamento" element={<BudgetPage />} />
+            <Route path="metas" element={<GoalsPage />} />
             <Route path="mes" element={<MonthPage />} />
             <Route path="seguranca" element={<SecurityPage />} />
             <Route path="analysis" element={<FinanceAnalysisPage />} />

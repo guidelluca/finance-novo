@@ -44,11 +44,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const el = document.documentElement
-    if (preference === 'system') {
-      delete el.dataset.theme
-    } else {
-      el.dataset.theme = preference
-    }
+    // sempre o tema efetivo: as cores e a variante dark: do Tailwind seguem este atributo
+    el.dataset.theme = resolved
     el.style.colorScheme = resolved
     window.localStorage.setItem(STORAGE_KEY, preference)
   }, [preference, resolved])

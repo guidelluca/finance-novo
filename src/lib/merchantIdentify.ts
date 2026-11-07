@@ -213,7 +213,7 @@ function ruleKeyFrom(core: string, raw: string): string | null {
 
 /** Tipo de operação no começo da descrição (extratos/prints): "Pix enviado · Maria", "Compra no débito · PADARIA". */
 const OPERATION_PREFIX =
-  /^(pix (enviado|recebido|agendado)|transfer[eê]ncia (enviada|recebida)|ted (enviada|recebida)|doc (enviado|recebido)|compra no (d[eé]bito|cr[eé]dito)|compra com cart[aã]o|pagamento de boleto|pagamento (efetuado|realizado)|boleto pago|d[eé]bito autom[aá]tico)\b\s*[·:\-–]?\s*/i
+  /^(pix (enviado|recebido|agendado)|pix transf(?:er[eê]ncia)?(?: para)?|transf(?:er[eê]ncia)? pix|transfer[eê]ncia (enviada|recebida)|ted (enviada|recebida)|doc (enviado|recebido)|compra no (d[eé]bito|cr[eé]dito)|compra com cart[aã]o|pagamento de boleto|pagamento (efetuado|realizado)|boleto pago|d[eé]bito autom[aá]tico)\b\s*[·:\-–]?\s*/i
 
 export function identifyMerchant(raw: string, cityHint?: string | null): MerchantInfo {
   let core = cleanDescriptor(raw, cityHint)

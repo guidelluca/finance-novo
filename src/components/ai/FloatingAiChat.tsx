@@ -37,6 +37,12 @@ export function FloatingAiChat() {
   const { user } = useAuth()
   const { contextPack } = useFinanceAiContext()
   const [open, setOpen] = useState(false)
+  // atalho "Perguntar" do Início abre o chat
+  useEffect(() => {
+    const onOpen = () => setOpen(true)
+    window.addEventListener('finance:open-ai', onOpen)
+    return () => window.removeEventListener('finance:open-ai', onOpen)
+  }, [])
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Msg[]>([])
   const [loading, setLoading] = useState(false)
