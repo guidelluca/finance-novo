@@ -1,6 +1,10 @@
+import { Navigate } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { isSupabaseConfigured } from '@/lib/supabase'
 
 export function SetupPage() {
+  // Já configurado (ex.: endereço /setup salvo de uma versão antiga): vai direto para o app/login
+  if (isSupabaseConfigured) return <Navigate to="/" replace />
   return (
     <div className="mx-auto max-w-lg px-4 py-10">
       <Card>
