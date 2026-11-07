@@ -1,0 +1,35 @@
+# Logs
+logs
+*.log
+build-log.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.npm-cache
+dist
+dist-ssr
+*.local
+.env
+.env.*.local
+
+# Vercel CLI (corre `vercel link` na raiz do repo, não em ~)
+.vercel
+
+# Supabase CLI (project-ref após `supabase link` — não commitar)
+.supabase/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.env*.local

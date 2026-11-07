@@ -1,0 +1,23 @@
+# Config mínima para o CLI (supabase link / db push).
+# Ajusta major_version se o Dashboard → Settings → Database mostrar outra versão (ex.: 17).
+
+project_id = "finance-pwa"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+enabled = false
+sql_paths = []
