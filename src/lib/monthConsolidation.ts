@@ -84,9 +84,10 @@ export type ConsolidatedMonth = {
 const SOURCE_PRIORITY: Record<TxSource, number> = { fatura: 5, extrato: 4, csv: 3, print: 2, manual: 1 }
 
 const CARD_PAYMENT =
-  /pagamento (de |da )?fatura|pgto\.? ?fatura|pag(to|amento)? (de )?cart[aã]o|fatura (do |de )?cart[aã]o|itaucard|nu ?pagamentos|pagamento.*\b(nubank|picpay card|cart[aã]o)\b|d[eé]bito autom[aá]tico.*fatura/i
+  /fatura paga|pagamento (de |da )?fatura|pgto\.? ?fatura|pag(to|amento)? (de )?cart[aã]o|fatura (do |de )?cart[aã]o|itaucard|nu ?pagamentos|pagamento.*\b(nubank|picpay card|cart[aã]o)\b|d[eé]bito autom[aá]tico.*fatura/i
 const INVESTMENT =
   /\b(aplica[cç][aã]o|resgate|rdb|cdb|lci|lca|tesouro direto|poupan[cç]a|caixinha|cofrinho|porquinho|investimento|guardado|guardar dinheiro)\b/i
+const SELF_TRANSFER = /conta pr[oó]pria|mesma titularidade/i
 const TRANSFER_HINT = /\b(pix|transf|transfer[eê]ncia|ted|doc)\b/i
 const FEE = /\b(anuidade|tarifa|juros|multa|encargo|mora|iof|cesta de servi[cç]os|pacote de servi[cç]os)\b/i
 const APP_RIDE = /uber|\b99\b|99 \(|cabify|indrive/i
@@ -184,6 +185,12 @@ export function consolidateMonth(
   // 1) Investimentos (aplicação/resgate) não são gasto nem receita
   for (const t of items) {
     if (INVESTMENT.test(t.description)) exclude(t, 'investimento', t.kind === 'debit' ? 'Aplicação' : 'Resgate')
+  }
+
+  // 1b) Pix/TED para você mesmo (o leitor do extrato marca "conta própria" pelo nome do titular)
+  for (const t of items) {
+    if (excluded.has(t.id) || !SELF_TRANSFER.test(t.description)) continue
+    exclude(t, 'transferencia_interna', t.kind === 'debit' ? 'Pix para outra conta sua' : 'Pix vindo de outra conta sua')
   }
 
   // 2) Pagamento de fatura do cartão: as compras já entram uma a uma pela fatura
@@ -336,7 +343,7 @@ export function consolidateMonth(
   }
 
   // 7) Padrões do histórico por estabelecimento
-  const histExp = hist.filter((t) => t.kind === 'debit' && !INVESTMENT.test(t.description) && !CARD_PAYMENT.test(t.description))
+  const histExp = hist.filter((t) => t.kind === 'debit' && !INVESTMENT.test(t.description) && !CARD_PAYMENT.test(t.description) && !SELF_TRANSFER.test(t.description))
   const byMerchant = new Map<string, ConsItem[]>()
   for (const t of histExp) byMerchant.set(t.merchantKey, [...(byMerchant.get(t.merchantKey) ?? []), t])
 

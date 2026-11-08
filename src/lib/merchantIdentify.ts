@@ -28,6 +28,10 @@ const C = {
   bar: ['Lazer', 'Restaurantes', 'Bares'],
   mercado: ['Mercado', 'Supermercado', 'Alimentação'],
   appTransporte: ['Uber', 'Transporte'],
+  transportePublico: ['Transporte', 'Ônibus', 'Transporte público'],
+  salario: ['Salário', 'Renda', 'Receitas'],
+  rendimento: ['Rendimentos', 'Investimentos'],
+  emprestimo: ['Empréstimos', 'Dívidas'],
   combustivel: ['Combustível', 'Carro', 'Transporte'],
   taxas: ['Taxas', 'Impostos', 'Tarifas'],
   estacionamento: ['Estacionamento', 'Carro', 'Transporte'],
@@ -47,7 +51,7 @@ const C = {
 /** Prefixos de intermediários (gateway/app) — o resto da descrição é o estabelecimento. */
 const VIA_PREFIXES: { re: RegExp; via: string; categories?: Cat; kind?: string }[] = [
   { re: /^IFD\s?\*\s?/i, via: 'iFood', categories: C.delivery, kind: 'Delivery' },
-  { re: /^IFOOD\s?\*?\s?/i, via: 'iFood', categories: C.delivery, kind: 'Delivery' },
+  { re: /^IFOOD(?!\.COM)\s?\*?\s?/i, via: 'iFood', categories: C.delivery, kind: 'Delivery' },
   { re: /^RAPPI\s?\*?\s?/i, via: 'Rappi', categories: C.delivery, kind: 'Delivery' },
   { re: /^MP\s?\*\s?/i, via: 'Mercado Pago' },
   { re: /^MERCADOPAGO\s?\*\s?/i, via: 'Mercado Pago' },
@@ -70,7 +74,18 @@ const VIA_PREFIXES: { re: RegExp; via: string; categories?: Cat; kind?: string }
 
 /** Marcas e padrões conhecidos (testados na descrição já sem prefixo e sem cidade). */
 const KNOWN: { re: RegExp; name: string | ((m: RegExpMatchArray) => string); kind: string; categories: Cat }[] = [
-  { re: /^IOF\b/i, name: 'IOF (compra internacional)', kind: 'Imposto', categories: C.taxas },
+  // Linhas de extrato de conta (Itaú e outros bancos)
+  { re: /^FATURA PAGA|^PAG(TO|AMENTO)?\.? (DE |DA )?FATURA/i, name: 'Pagamento de fatura', kind: 'Pagamento de fatura', categories: [] },
+  { re: /REMUNERA[CÇ][AÃ]O\s?\/?\s?SAL[AÁ]RIO|CR[EÉ]DITO (DE )?SAL[AÁ]RIO|^SAL[AÁ]RIO\b|^PAGTO\.? SAL[AÁ]RIO/i, name: 'Salário', kind: 'Salário', categories: C.salario },
+  { re: /^TED\s+[\d.]+\.(.+)$/i, name: (m) => `TED · ${titleCase(m[1]!)}`, kind: 'Transferência (TED)', categories: [] },
+  { re: /^REND(IMENTO)?S?\.?\s+(PAGO|APLIC)|^RENDIMENTO/i, name: 'Rendimento da aplicação', kind: 'Rendimento', categories: C.rendimento },
+  { re: /CREDI[AÁ]RIO|CONSIGNADO|EMPR[EÉ]STIMO|CR[EÉ]DITO LIBERAD/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Empréstimo / crediário', categories: C.emprestimo },
+  { re: /^EST(ORNO)?\s+/i, name: (m) => `Estorno · ${titleCase((m.input ?? '').replace(/^EST(ORNO)?\s+/i, ''))}`, kind: 'Estorno', categories: [] },
+  { re: /^MERCADO\s?PAG(O)?\b/i, name: 'Mercado Pago (pagamento)', kind: 'Pagamento via Mercado Pago', categories: [] },
+  { re: /^IFOOD\.COM/i, name: 'iFood', kind: 'Delivery', categories: C.delivery },
+  { re: /^VIA[CÇ][AÃ]O\b/i, name: (m) => `Ônibus · ${titleCase(m.input ?? m[0]!)}`, kind: 'Transporte público', categories: C.transportePublico },
+  { re: /AUTOPASS|^PAY AUTOP|^AUTOP\b/i, name: 'Autopass (ônibus/metrô)', kind: 'Transporte público', categories: C.transportePublico },
+  { re: /^IOF\b/i, name: 'IOF', kind: 'Imposto', categories: C.taxas },
   { re: /ANUIDADE|TARIFA|JUROS|ENCARGOS|MULTA/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Tarifa / juros', categories: C.taxas },
   // Transporte por app
   { re: /^UBER\s*\*?\s*EATS/i, name: 'Uber Eats', kind: 'Delivery', categories: C.delivery },
@@ -119,7 +134,7 @@ const KNOWN: { re: RegExp; name: string | ((m: RegExpMatchArray) => string); kin
   // Saúde
   { re: /DROGA\s?RAIA|DROGASIL|DROGAL|DROGARIA|PACHECO|PAGUE\s?MENOS|FARMAIS|FARM[AÁ]CIA|PANVEL|ULTRAFARMA/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Farmácia', categories: C.saude },
   // Mercado
-  { re: /SUPERMERC|HIPERMERC|MERCADO\b|MERCEARIA|HORTIFRUT|SACOL[AÃ]O|ATACAD|ASSAI|CARREFOUR|P[AÃ]O\s?DE\s?A[CÇ]UCAR|DALBEN|OXXO|SAMS\s?CLUB|EMP[OÓ]RIO\s?DA\s?FRUTA|MINUTO\s?P[AÃ]O/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Mercado', categories: C.mercado },
+  { re: /SUPERMERC|SUPER\s?MERCA|HIPERMERC|MERCADO\b|MERCEARIA|HORTIFRUT|SACOL[AÃ]O|ATACAD|ASSAI|CARREFOUR|P[AÃ]O\s?DE\s?A[CÇ]UCAR|DALBEN|OXXO|SAMS\s?CLUB|EMP[OÓ]RIO\s?DA\s?FRUTA|MINUTO\s?P[AÃ]O/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Mercado', categories: C.mercado },
   // Combustível / carro
   { re: /POSTO|SHELL|IPIRANGA|PETROBRAS|\bBR\s?MANIA|COMBUST/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Combustível', categories: C.combustivel },
   { re: /ESTACION|ESTAPAR|ZONA\s?AZUL|SEM\s?PARAR|CONECTCAR|VELOE|PEDAGIO|PED[AÁ]GIO/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Estacionamento / pedágio', categories: C.estacionamento },
@@ -213,9 +228,18 @@ function ruleKeyFrom(core: string, raw: string): string | null {
 
 /** Tipo de operação no começo da descrição (extratos/prints): "Pix enviado · Maria", "Compra no débito · PADARIA". */
 const OPERATION_PREFIX =
-  /^(pix (enviado|recebido|agendado)|pix transf(?:er[eê]ncia)?(?: para)?|transf(?:er[eê]ncia)? pix|transfer[eê]ncia (enviada|recebida)|ted (enviada|recebida)|doc (enviado|recebido)|compra no (d[eé]bito|cr[eé]dito)|compra com cart[aã]o|pagamento de boleto|pagamento (efetuado|realizado)|boleto pago|d[eé]bito autom[aá]tico)\b\s*[·:\-–]?\s*/i
+  /^(pix qrs?|pix cart[aã]o|pag boleto|pix (enviado|recebido|agendado)|pix transf(?:er[eê]ncia)?(?: para)?|transf(?:er[eê]ncia)? pix|transfer[eê]ncia (enviada|recebida)|ted (enviada|recebida)|doc (enviado|recebido)|compra no (d[eé]bito|cr[eé]dito)|compra com cart[aã]o|pagamento de boleto|pagamento (efetuado|realizado)|boleto pago|d[eé]bito autom[aá]tico)\b\s*[·:\-–]?\s*/i
 
 export function identifyMerchant(raw: string, cityHint?: string | null): MerchantInfo {
+  if (/·\s*conta pr[oó]pria$/i.test(raw)) {
+    return {
+      name: 'Você · outra conta',
+      kind: 'Transferência entre suas contas',
+      via: null,
+      categories: ['Transferências', 'Pix'],
+      ruleKey: null,
+    } as MerchantInfo
+  }
   let core = cleanDescriptor(raw, cityHint)
   let operation: string | null = null
   const op = core.match(OPERATION_PREFIX)
@@ -223,7 +247,9 @@ export function identifyMerchant(raw: string, cityHint?: string | null): Merchan
     operation = op[1]!.charAt(0).toUpperCase() + op[1]!.slice(1).toLowerCase()
     core = core.slice(op[0].length).trim()
   }
-  const opCats: string[] = operation && /^pix|transfer|ted|doc/i.test(operation) ? ['Pix', 'Transferências'] : []
+  // Pix por QR code é compra (paga um estabelecimento), não transferência para pessoa
+  const opCats: string[] =
+    operation && /^pix|transfer|ted|doc/i.test(operation) && !/qr|boleto/i.test(operation) ? ['Pix', 'Transferências'] : []
   const info = identifyCore(core, raw, operation)
   // Pix/transferência para pessoa: categoria "Pix" só se nada mais específico foi achado
   if (opCats.length && info.categories.length === 0) info.categories = opCats

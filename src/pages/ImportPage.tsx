@@ -25,6 +25,7 @@ import { CSV_PROFILES, parseCsvBrazil, parseFinancePwaCsv, type CsvProfileId } f
 import { detectParser } from '@/parsers/detect'
 import { parseControleGastosExtrato } from '@/parsers/controleGastosExtrato'
 import { parseItauExtrato } from '@/parsers/itauExtrato'
+import { parseItauExtratoLayout } from '@/parsers/itauExtratoLayout'
 import { parseMercadoPagoExtrato } from '@/parsers/mercadoPagoExtrato'
 import { parseNubankExtrato } from '@/parsers/nubankExtrato'
 import { extractPdfLayout, extractPdfText } from '@/parsers/pdfText'
@@ -523,6 +524,20 @@ export function ImportPage() {
           setDrafts(enrichDrafts(flagged, ruleRows.filter((x) => x.enabled), categoryRows))
           setStep('review')
           return
+        }
+
+        // extrato de conta Itaú: lido linha a linha pela posição (valor × saldo), conferido com o saldo do dia
+        if (parserId === 'itau_extrato_v1') {
+          const ext = parseItauExtratoLayout(await extractPdfLayout(buf))
+          if (ext.drafts.length > 0) {
+            const flagged = await flagPossibleDuplicates(user.id, ext.drafts)
+            setLastParserId(parserId)
+            setDetectedBank('Extrato Itaú (conta)')
+            setWarnings(ext.warnings)
+            setDrafts(enrichDrafts(flagged, ruleRows.filter((x) => x.enabled), categoryRows))
+            setStep('review')
+            return
+          }
         }
       }
 
