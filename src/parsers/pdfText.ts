@@ -1,5 +1,7 @@
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
-import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+// Build "legacy" do pdf.js: a build padrão exige navegadores muito recentes e falha calada
+// em iPhones/Macs com Safari um pouco mais antigo. A legacy funciona nos dois.
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import pdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 
 GlobalWorkerOptions.workerSrc = pdfWorker
 

@@ -203,6 +203,10 @@ async function flagPossibleDuplicates(userId: string, drafts: TransactionDraft[]
   })
 }
 
+function isDocFile(f: File): boolean {
+  return f.type === 'application/pdf' || /\.(pdf|csv|tsv|txt)$/i.test(f.name) || /csv/.test(f.type)
+}
+
 function centsToInput(cents: number): string {
   return (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -221,6 +225,7 @@ interface ShotItem {
 export function ImportPage() {
   const { user } = useAuth()
   const [file, setFile] = useState<File | null>(null)
+  const selectedFile = file
   const [parserFallback, setParserFallback] = useState<ParserId>('nubank_extrato_v1')
   const [lastParserId, setLastParserId] = useState<ParserId>('nubank_extrato_v1')
   const [drafts, setDrafts] = useState<TransactionDraft[]>([])
@@ -246,6 +251,8 @@ export function ImportPage() {
   const [progress, setProgress] = useState<string | null>(null)
   const [detectedBank, setDetectedBank] = useState<string | null>(null)
   const [learnFromCorrections, setLearnFromCorrections] = useState(true)
+  const [fileError, setFileError] = useState<string | null>(null)
+  const parseFileRef = useRef<(f?: File) => Promise<void>>(async () => {})
 
   const loadImports = useCallback(async () => {
     if (!user) return
@@ -314,7 +321,14 @@ export function ImportPage() {
 
   const addShotFiles = useCallback((files: FileList | File[] | null) => {
     if (!files) return
-    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'))
+    const all = Array.from(files)
+    // PDF/CSV soltos ou escolhidos aqui vão direto para a leitura de arquivo
+    const doc = all.find((f) => isDocFile(f))
+    if (doc) {
+      void parseFileRef.current(doc)
+      return
+    }
+    const arr = all.filter((f) => f.type.startsWith('image/') || /\.(heic|heif|png|jpe?g|webp)$/i.test(f.name))
     if (arr.length === 0) return
     setShots((prev) => {
       const next = [...prev]
@@ -349,7 +363,7 @@ export function ImportPage() {
       const imgs: File[] = []
       for (let i = 0; i < items.length; i++) {
         const it = items[i]
-        if (!it || !it.type.startsWith('image/')) continue
+        if (!it || it.kind !== 'file' || !(it.type.startsWith('image/') || it.type === 'application/pdf' || /csv/.test(it.type))) continue
         const f = it.getAsFile()
         if (f) imgs.push(f)
       }
@@ -434,11 +448,15 @@ export function ImportPage() {
     }
   }
 
-  const parseFile = async () => {
+  const parseFile = async (picked?: File) => {
+    const file = picked ?? selectedFile
     if (!file || !user) return
+    if (picked) setFile(picked)
     setBusy(true)
     setWarnings([])
+    setFileError(null)
     setSaveNotice(null)
+    setProgress(/\.pdf$/i.test(file.name) ? 'Lendo o PDF…' : 'Lendo o arquivo…')
     try {
       const { data: r } = await supabase.from('rules').select('*').eq('user_id', user.id)
       const ruleRows = (r ?? []) as Rule[]
@@ -492,6 +510,12 @@ export function ImportPage() {
 
         if (parserId === 'fatura_cartao_pdf_v1') {
           const fatura = parseFaturaCartao(await extractPdfLayout(buf))
+          if (fatura.drafts.length === 0) {
+            setFileError(
+              `Reconheci a fatura${fatura.bank ? ` ${fatura.bank}` : ''}, mas não achei os lançamentos. ${fatura.warnings.join(' ')} Me mande o PDF para eu ajustar o leitor.`,
+            )
+            return
+          }
           const flagged = await flagPossibleDuplicates(user.id, fatura.drafts)
           setLastParserId(parserId)
           setDetectedBank(fatura.bank ? `Fatura ${fatura.bank}` : 'Fatura de cartão')
@@ -503,7 +527,19 @@ export function ImportPage() {
       }
 
       setLastParserId(parserId)
+      if (!text.trim()) {
+        setFileError(
+          'Este PDF não tem texto (é uma imagem escaneada). Tire um print da tela da fatura e envie como imagem.',
+        )
+        return
+      }
       const result = runParse(parserId, text)
+      if (result.drafts.length === 0) {
+        setFileError(
+          `Não encontrei lançamentos lendo como “${parserLabel(parserId)}”. ${result.warnings.slice(0, 2).join(' ')} Escolha o tipo certo abaixo e tente de novo.`,
+        )
+        return
+      }
 
       let categoryRowsResolved = categoryRows
       if (parserId === 'csv_finance_pwa_v1') {
@@ -523,12 +559,19 @@ export function ImportPage() {
       setDrafts(withRules)
       setStep('review')
     } catch (e) {
-      setWarnings([(e as Error).message])
+      const msg = e instanceof Error ? e.message : String(e)
+      setFileError(
+        /password|senha/i.test(msg)
+          ? 'Este PDF tem senha. Abra no app do banco, baixe a fatura sem senha (ou tire um print) e tente de novo.'
+          : `Não consegui ler o arquivo: ${msg}`,
+      )
       setDrafts([])
     } finally {
       setBusy(false)
+      setProgress(null)
     }
   }
+  parseFileRef.current = parseFile
 
   const updateDraft = (tempId: string, patch: Partial<TransactionDraft>) => {
     setDrafts((d) => d.map((x) => (x.tempId === tempId ? { ...x, ...patch } : x)))
@@ -812,6 +855,23 @@ export function ImportPage() {
         ) : null}
       </header>
 
+      {fileError || (busy && progress && step === 'pick') ? (
+        <div
+          role={fileError ? 'alert' : 'status'}
+          className={cn(
+            'flex items-start gap-2 rounded-2xl border p-3.5 text-sm',
+            fileError ? 'border-danger/40 bg-danger/10 text-danger' : 'border-border bg-surface',
+          )}
+        >
+          <span className="flex-1">{fileError ?? progress}</span>
+          {fileError ? (
+            <button type="button" aria-label="Fechar aviso" onClick={() => setFileError(null)} className="text-xs font-semibold underline">
+              Fechar
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {step === 'review' ? (
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           {[
@@ -893,8 +953,8 @@ export function ImportPage() {
               className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border/70 bg-surface/50 p-5 text-center text-sm"
             >
               <p className="text-muted">
-                Arrasta imagens aqui, cola com <kbd className="rounded bg-surface-elevated px-1">Cmd/Ctrl+V</kbd>
-                {' '}ou usa os botões:
+                Arraste prints ou o PDF da fatura aqui, cole com <kbd className="rounded bg-surface-elevated px-1">Cmd/Ctrl+V</kbd>
+                {' '}ou use os botões:
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 <Button
@@ -905,7 +965,7 @@ export function ImportPage() {
                   disabled={busy}
                 >
                   <ImagePlus className="size-4" />
-                  Escolher imagens
+                  Escolher prints ou PDF
                 </Button>
                 <Button
                   type="button"
@@ -921,7 +981,7 @@ export function ImportPage() {
               <input
                 ref={shotInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif,.pdf,application/pdf,.csv,text/csv"
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -1021,10 +1081,16 @@ export function ImportPage() {
           <CardContent className="space-y-4">
             <input
               type="file"
-              accept=".pdf,.csv,.tsv,.txt"
-              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-accent file:px-4 file:py-2 file:text-sm file:font-medium file:text-[#04120c]"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              accept=".pdf,application/pdf,.csv,text/csv,.tsv,.txt"
+              aria-label="Escolher PDF ou CSV"
+              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-fg"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                e.target.value = ''
+                if (f) void parseFile(f)
+              }}
             />
+            {file ? <p className="truncate text-xs text-muted">Arquivo: {file.name}</p> : null}
             <div>
               <Label>Tipo (PDF ou CSV)</Label>
               <select
