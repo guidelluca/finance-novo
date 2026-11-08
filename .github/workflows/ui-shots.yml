@@ -1,0 +1,35 @@
+name: UI screenshots
+# Prints das telas com dados fictícios (Supabase simulado). Não publica nada no site.
+on:
+  push:
+    branches: [ui-review]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+        env:
+          VITE_BASE: /
+          VITE_SUPABASE_URL: https://mock.supabase.co
+          VITE_SUPABASE_ANON_KEY: anon-demo
+      - run: npm install --no-save --no-audit --no-fund playwright@1.49.1 && npx playwright install --with-deps chromium
+      - run: |
+          npx vite preview --port 4173 --strictPort &
+          sleep 3
+          node e2e/shots.mjs
+      - name: Salva os prints no branch ui-shots
+        run: |
+          cd shots
+          git init -q
+          git config user.name ci && git config user.email ci@example.com
+          git checkout -q -b ui-shots
+          git add -A && git commit -qm "prints ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ui-shots
