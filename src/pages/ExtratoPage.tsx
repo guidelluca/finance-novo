@@ -29,6 +29,7 @@ const EXCLUDED_LABEL: Record<ExcludedReason, string> = {
   transferencia_interna: 'entre suas contas — não conta',
   investimento: 'aplicação — não conta',
   estorno: 'estornado — não conta',
+  linha_invalida: 'não é lançamento (saldo/cabeçalho) — apague',
 }
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()

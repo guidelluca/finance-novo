@@ -35,7 +35,7 @@ export type ConsItem = ConsTx & {
   ruleKey: string | null
 }
 
-export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento' | 'estorno'
+export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento' | 'estorno' | 'linha_invalida'
 
 export type Excluded = { tx: ConsItem; reason: ExcludedReason; relatedId?: string; note: string }
 
@@ -54,6 +54,7 @@ export type IssueType =
   | 'transferencia_interna'
   | 'estorno'
   | 'categoria_suspeita'
+  | 'linha_invalida'
 
 export type Severity = 'alta' | 'media' | 'baixa'
 
@@ -208,6 +209,22 @@ export function consolidateMonth(
   // 1) Investimentos (aplicação/resgate) não são gasto nem receita
   for (const t of items) {
     if (INVESTMENT.test(t.description)) exclude(t, 'investimento', t.kind === 'debit' ? 'Aplicação' : 'Resgate')
+  }
+
+  // 0) Linha do extrato que não é lançamento (saldo, cabeçalho da tabela) gravada por engano
+  const INVALID_LINE = /^saldo (do dia|anterior|total|final|em conta)\b|^saldo\s*$|^data\s+lan[cç]amentos?\b|lan[cç]amentos\s+saldo|valor\s*\(r\$\)/i
+  const invalid = items.filter((t) => INVALID_LINE.test(t.description.trim()))
+  for (const t of invalid) exclude(t, 'linha_invalida', 'Linha de saldo ou cabeçalho do extrato, não é um lançamento')
+  if (invalid.length) {
+    issues.push({
+      id: issueId('linha_invalida', invalid.map((t) => t.id)),
+      type: 'linha_invalida',
+      severity: 'alta',
+      title: `${invalid.length} linha(s) de saldo/cabeçalho gravadas como lançamento`,
+      detail:
+        'Vieram de uma importação antiga do extrato (ex.: “Saldo do Dia”). Já tirei da soma; apague-as. Se o extrato for do Itaú, importe-o de novo: os valores das outras linhas também podem estar trocados.',
+      txIds: invalid.map((t) => t.id),
+    })
   }
 
   // 1b) Pix/TED para você mesmo (o leitor do extrato marca "conta própria" pelo nome do titular)

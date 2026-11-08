@@ -50,6 +50,7 @@ const REASON_LABEL: Record<string, string> = {
   transferencia_interna: 'Transferências entre suas contas',
   investimento: 'Aplicações e resgates',
   estorno: 'Estornos (cobrança e devolução)',
+  linha_invalida: 'Linhas que não são lançamentos',
 }
 
 function loadDismissed(userId: string): Set<string> {
@@ -189,6 +190,20 @@ export function MonthPage() {
     }
     setRows((rs) => rs.filter((r) => r.id !== id))
     setNotice('Lançamento apagado.')
+  }
+
+  const deleteMany = async (ids: string[]) => {
+    if (!user || ids.length === 0) return
+    if (!window.confirm(`Apagar ${ids.length} linha(s) que não são lançamentos? Isto não pode ser desfeito.`)) return
+    for (let i = 0; i < ids.length; i += 100) {
+      const { error: e } = await supabase.from('transactions').delete().eq('user_id', user.id).in('id', ids.slice(i, i + 100))
+      if (e) {
+        setNotice(`Não consegui apagar: ${e.message}`)
+        return
+      }
+    }
+    setRows((rs) => rs.filter((r) => !ids.includes(r.id)))
+    setNotice(`${ids.length} linha(s) apagada(s).`)
   }
 
   const setCategory = async (tx: ConsItem, categoryId: string) => {
@@ -435,6 +450,16 @@ export function MonthPage() {
                             Apagar uma
                           </Button>
                         ) : null}
+                        {issue.type === 'linha_invalida' ? (
+                          <>
+                            <Button size="sm" variant="secondary" onClick={() => void deleteMany(issue.txIds)}>
+                              Apagar {issue.txIds.length > 1 ? `as ${issue.txIds.length} linhas` : 'a linha'}
+                            </Button>
+                            <Button size="sm" variant="ghost" asChild>
+                              <Link to="/import">Importar o extrato de novo</Link>
+                            </Button>
+                          </>
+                        ) : null}
                         {issue.type === 'estorno' ? (
                           <Button size="sm" variant="ghost" onClick={() => dismiss(issue)}>
                             Não é estorno — contar os dois
@@ -450,7 +475,7 @@ export function MonthPage() {
                             <Link to="/import">Importar</Link>
                           </Button>
                         ) : null}
-                        {issue.type !== 'sem_categoria' && issue.type !== 'duplicada' && issue.type !== 'transferencia_interna' && issue.type !== 'estorno' ? (
+                        {issue.type !== 'sem_categoria' && issue.type !== 'duplicada' && issue.type !== 'transferencia_interna' && issue.type !== 'estorno' && issue.type !== 'linha_invalida' ? (
                           <Button size="sm" variant="ghost" onClick={() => dismiss(issue)}>
                             <EyeOff className="size-4" /> Está certo
                           </Button>

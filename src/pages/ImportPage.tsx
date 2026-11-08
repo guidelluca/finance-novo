@@ -189,21 +189,27 @@ async function fetchTxRange<T>(userId: string, from: string, to: string, columns
  * - descrição diferente (outra fonte: print × fatura, Nubank × Itaú) → importa mesmo assim,
  *   sinalizado; o consolidado só passa a contar quando você confirmar que não é repetida.
  */
-async function flagPossibleDuplicates(userId: string, drafts: TransactionDraft[]): Promise<TransactionDraft[]> {
+async function flagPossibleDuplicates(
+  userId: string,
+  drafts: TransactionDraft[],
+  /** lançamentos que vão ser substituídos (não contam como "já existe") */
+  ignoreIds: Set<string> = new Set(),
+): Promise<TransactionDraft[]> {
   if (drafts.length === 0) return drafts
   const dates = drafts.map((d) => d.date).sort()
-  type Row = { date: string; amount_cents: number; kind: string; description_raw: string; description_normalized: string | null }
+  type Row = { id: string; date: string; amount_cents: number; kind: string; description_raw: string; description_normalized: string | null }
   let data: Row[]
   try {
     data = await fetchTxRange<Row>(
       userId,
       shiftIso(dates[0]!, -1),
       shiftIso(dates[dates.length - 1]!, 1),
-      'date, amount_cents, kind, description_raw, description_normalized',
+      'id, date, amount_cents, kind, description_raw, description_normalized',
     )
   } catch {
     return drafts
   }
+  data = data.filter((r) => !ignoreIds.has(r.id))
   const logical = (raw: string, norm: string | null) => normalizeTransactionLogicalDescription(norm ?? raw.toLowerCase(), raw)
   // conta quantas já existem por data+valor+tipo: 2 Ubers iguais no arquivo e 1 salvo → só 1 é desmarcado
   const exact = new Map<string, number>()
@@ -233,6 +239,33 @@ async function flagPossibleDuplicates(userId: string, drafts: TransactionDraft[]
       ],
     }
   })
+}
+
+export type OldRow = {
+  id: string
+  date: string
+  amount_cents: number
+  kind: 'debit' | 'credit'
+  category_id: string | null
+}
+
+/** Lançamentos de importações anteriores do mesmo leitor, dentro do período do arquivo novo. */
+async function findOldImportRows(userId: string, parserId: string, from: string, to: string): Promise<{ rows: OldRow[]; full: unknown[] }> {
+  const { data: batches } = await supabase.from('import_batches').select('id').eq('user_id', userId).eq('parser_id', parserId)
+  const ids = ((batches ?? []) as { id: string }[]).map((b) => b.id)
+  if (ids.length === 0) return { rows: [], full: [] }
+  const full: Record<string, unknown>[] = []
+  for (let i = 0; i < ids.length; i += 50) {
+    const { data } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .in('import_batch_id', ids.slice(i, i + 50))
+      .gte('date', from)
+      .lte('date', to)
+    full.push(...((data ?? []) as Record<string, unknown>[]))
+  }
+  return { rows: full as unknown as OldRow[], full }
 }
 
 function shiftIso(iso: string, days: number): string {
@@ -294,6 +327,10 @@ export function ImportPage() {
   const [detectedBank, setDetectedBank] = useState<string | null>(null)
   const [learnFromCorrections, setLearnFromCorrections] = useState(true)
   const [fileError, setFileError] = useState<string | null>(null)
+  /** importação antiga do mesmo extrato (lida com o leitor antigo) que pode ser substituída */
+  const [replaceOld, setReplaceOld] = useState<{ rows: OldRow[]; full: unknown[] } | null>(null)
+  const [replaceChecked, setReplaceChecked] = useState(true)
+  const restoreReplacedRef = useRef<() => Promise<void>>(async () => {})
   const parseFileRef = useRef<(f?: File) => Promise<void>>(async () => {})
 
   const loadImports = useCallback(async () => {
@@ -497,6 +534,8 @@ export function ImportPage() {
     setBusy(true)
     setWarnings([])
     setFileError(null)
+    setReplaceOld(null)
+    setReplaceChecked(true)
     setSaveNotice(null)
     setProgress(/\.pdf$/i.test(file.name) ? 'Lendo o PDF…' : 'Lendo o arquivo…')
     try {
@@ -571,7 +610,13 @@ export function ImportPage() {
         if (parserId === 'itau_extrato_v1') {
           const ext = parseItauExtratoLayout(await extractPdfLayout(buf))
           if (ext.drafts.length > 0) {
-            const flagged = await flagPossibleDuplicates(user.id, ext.drafts)
+            const ds = ext.drafts.map((d) => d.date).sort()
+            const old = await findOldImportRows(user.id, parserId, ds[0]!, ds[ds.length - 1]!)
+            if (old.rows.length > 0) setReplaceOld(old)
+            // categoria que você já tinha dado ao lançamento antigo (mesma data, valor e tipo) é mantida
+            const oldCat = new Map<string, string>()
+            for (const r of old.rows) if (r.category_id) oldCat.set(`${r.date}|${r.amount_cents}|${r.kind}`, r.category_id)
+            const flagged = await flagPossibleDuplicates(user.id, ext.drafts, new Set(old.rows.map((r) => r.id)))
             setLastParserId(parserId)
             setDetectedBank('Extrato Itaú (conta)')
             // guarda o nome do titular: Pix para esse nome em outros bancos = transferência entre suas contas
@@ -579,7 +624,12 @@ export function ImportPage() {
               void supabase.auth.updateUser({ data: { owner_name: ext.holderName } })
             }
             setWarnings(ext.warnings)
-            setDrafts(enrichDrafts(flagged, ruleRows.filter((x) => x.enabled), categoryRows))
+            setDrafts(
+              enrichDrafts(flagged, ruleRows.filter((x) => x.enabled), categoryRows).map((d) => {
+                const c = oldCat.get(`${d.date}|${d.amountCents}|${d.kind}`)
+                return c ? { ...d, categoryId: c, autoCategoryId: c } : d
+              }),
+            )
             setStep('review')
             return
           }
@@ -652,6 +702,7 @@ export function ImportPage() {
     setBusy(true)
     let createdBatchId: string | null = null
     let inserted = false
+    restoreReplacedRef.current = async () => {}
     try {
       const parserId = lastParserId
       const defaultAccount = accountLabelFromImport(parserId, currentFilename)
@@ -747,6 +798,24 @@ export function ImportPage() {
       )
 
       const candidateKeys = [...new Set(prepared.flatMap((p) => p.candidates))]
+      // substitui a importação antiga do mesmo extrato (lida com o leitor antigo) neste período
+      let replaced: Record<string, unknown>[] = []
+      if (replaceOld && replaceChecked && replaceOld.rows.length > 0) {
+        const ids = replaceOld.rows.map((r) => r.id)
+        for (let i = 0; i < ids.length; i += 100) {
+          const { error: dErr } = await supabase.from('transactions').delete().eq('user_id', user.id).in('id', ids.slice(i, i + 100))
+          if (dErr) throw dErr
+        }
+        replaced = replaceOld.full as Record<string, unknown>[]
+      }
+      restoreReplacedRef.current = async () => {
+        if (replaced.length === 0) return
+        // coluna gerada não pode ser enviada de volta
+        const back = replaced.map(({ logical_fingerprint: _lf, ...rest }) => rest)
+        await supabase.from('transactions').upsert(back as never[], { onConflict: 'id', ignoreDuplicates: true })
+        replaced = []
+      }
+
       // em lotes: uma fatura grande gera centenas de chaves e a URL da consulta passaria do limite
       const existing = new Set<string | null>()
       for (let i = 0; i < candidateKeys.length; i += 80) {
@@ -840,6 +909,7 @@ export function ImportPage() {
       const possibleDup = toSave.filter((d) => d.reviewFlags?.some((f) => f.startsWith('possível repetida'))).length
       const linkedCards = rows.filter((r) => r.credit_card_id).length
       const extra =
+        (replaced.length ? ` ${replaced.length} lançamento(s) antigos deste período foram substituídos.` : '') +
         (possibleDup
           ? ` ${possibleDup} possível(is) repetida(s) entraram sem contar nos totais: confirme no Extrato ou no Mês.`
           : '') +
@@ -857,6 +927,7 @@ export function ImportPage() {
       // salário novo pode mudar o dia em que o mês financeiro começa
       if (toSave.some((d) => d.kind === 'credit' && SALARY_RE.test(d.descriptionRaw))) void refreshSalaryAnchors(user.id)
       setStep('pick')
+      setReplaceOld(null)
       setPickedAccountId(null)
       setFile(null)
       setDrafts([])
@@ -865,7 +936,8 @@ export function ImportPage() {
       setShotHint('')
       void loadImports()
     } catch (e) {
-      // nada foi gravado: apaga o registro de importação vazio para não poluir o histórico
+      // nada foi gravado: devolve os lançamentos antigos que tinham sido tirados e apaga o registro vazio
+      if (!inserted) await restoreReplacedRef.current()
       if (createdBatchId && !inserted) {
         await supabase.from('import_files').delete().eq('batch_id', createdBatchId)
         await supabase.from('import_batches').delete().eq('id', createdBatchId)
@@ -1288,6 +1360,24 @@ export function ImportPage() {
                 </select>
                 {!targetAccount ? <span className="text-xs text-warning">escolha para o fechamento do mês saber</span> : null}
               </label>
+              {replaceOld ? (
+                <label className="mt-2 flex items-start gap-2 rounded-xl border border-warning/50 bg-warning/10 p-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-4"
+                    checked={replaceChecked}
+                    onChange={(e) => setReplaceChecked(e.target.checked)}
+                  />
+                  <span>
+                    <strong>Substituir {replaceOld.rows.length} lançamento(s) importados antes deste extrato</strong>, no mesmo período (
+                    {(() => {
+                      const ds = replaceOld.rows.map((r) => r.date).sort()
+                      return `${ds[0]!.slice(8)}/${ds[0]!.slice(5, 7)} a ${ds[ds.length - 1]!.slice(8)}/${ds[ds.length - 1]!.slice(5, 7)}`
+                    })()}
+                    ). A versão anterior do leitor trocava valores e lia “Saldo do Dia” como gasto. Categorias que você já tinha escolhido são mantidas.
+                  </span>
+                </label>
+              ) : null}
             </div>
             <div className="flex gap-2">
               <Button type="button" variant="secondary" onClick={() => setStep('pick')}>
