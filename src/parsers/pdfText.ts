@@ -4,7 +4,7 @@ import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 GlobalWorkerOptions.workerSrc = pdfWorker
 
 export async function extractPdfText(data: ArrayBuffer): Promise<string> {
-  const doc = await getDocument({ data: new Uint8Array(data) }).promise
+  const doc = await getDocument({ data: new Uint8Array(data.slice(0)) }).promise
   const parts: string[] = []
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i)
@@ -27,7 +27,7 @@ export async function extractPdfText(data: ArrayBuffer): Promise<string> {
 export async function extractPdfLayout(
   data: ArrayBuffer,
 ): Promise<{ width: number; height: number; items: { x: number; y: number; w: number; str: string }[] }[]> {
-  const doc = await getDocument({ data: new Uint8Array(data) }).promise
+  const doc = await getDocument({ data: new Uint8Array(data.slice(0)) }).promise
   const pages = []
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i)
