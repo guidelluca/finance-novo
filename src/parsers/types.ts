@@ -12,6 +12,8 @@ export type ParserId =
   | 'screenshot_ai_v1'
   | 'screenshot_local_v1'
   | 'fatura_cartao_pdf_v1'
+  | 'inter_extrato_v1'
+  | 'csv_inter_v1'
 
 export interface TransactionDraft {
   tempId: string

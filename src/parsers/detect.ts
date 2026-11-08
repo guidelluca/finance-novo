@@ -1,4 +1,5 @@
 import { looksLikeCreditCardInvoice } from '@/parsers/faturaCartao'
+import { looksLikeInterCsv, looksLikeInterPdf } from '@/parsers/inter'
 import type { ParserId } from '@/parsers/types'
 
 export function detectParser(filename: string, textHead: string): ParserId | null {
@@ -8,6 +9,8 @@ export function detectParser(filename: string, textHead: string): ParserId | nul
   if (!lower.endsWith('.csv') && looksLikeCreditCardInvoice(textHead)) {
     return 'fatura_cartao_pdf_v1'
   }
+  if (lower.endsWith('.csv') && looksLikeInterCsv(textHead)) return 'csv_inter_v1'
+  if (!lower.endsWith('.csv') && looksLikeInterPdf(textHead)) return 'inter_extrato_v1'
   if (
     /controle\s+de\s+gastos/i.test(lower) ||
     (/controle\s+de\s+gastos/i.test(head) && /histórico|historico/i.test(head) && /mês\/ano|mes\/ano/i.test(head))

@@ -24,6 +24,9 @@ export function accountLabelFromImport(parserId: ParserId, filename: string): st
   ) {
     return 'Mercado Pago'
   }
+  if (parserId === 'inter_extrato_v1' || parserId === 'csv_inter_v1' || /\binter\b/i.test(lower)) {
+    return 'Banco Inter'
+  }
   if (parserId === 'csv_finance_pwa_v1') {
     return 'Finance PWA (CSV)'
   }

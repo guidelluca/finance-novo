@@ -26,6 +26,7 @@ import { detectParser } from '@/parsers/detect'
 import { parseControleGastosExtrato } from '@/parsers/controleGastosExtrato'
 import { parseItauExtrato } from '@/parsers/itauExtrato'
 import { parseItauExtratoLayout, type BalanceMismatch } from '@/parsers/itauExtratoLayout'
+import { looksLikeInterCsv, parseInterCsv, parseInterPdfLayout } from '@/parsers/inter'
 import { parseMercadoPagoExtrato } from '@/parsers/mercadoPagoExtrato'
 import { parseNubankExtrato } from '@/parsers/nubankExtrato'
 import { extractPdfLayout, extractPdfText } from '@/parsers/pdfText'
@@ -49,12 +50,14 @@ const PARSER_OPTIONS: { id: ParserId; label: string }[] = [
   { id: 'fatura_cartao_pdf_v1', label: 'Fatura de cartão — PDF (PicPay, Itaú e parecidos)' },
   { id: 'nubank_extrato_v1', label: 'Nubank — extrato PDF' },
   { id: 'mercadopago_extrato_v1', label: 'Mercado Pago — extrato PDF' },
+  { id: 'inter_extrato_v1', label: 'Banco Inter — extrato PDF' },
   { id: 'csv_finance_pwa_v1', label: 'Finance PWA — CSV (lançamentos + categorias)' },
   { id: 'csv_nubank_v1', label: 'Nubank — CSV' },
   { id: 'csv_nubank_planilha_v1', label: 'Nubank — planilha (TSV / Excel colar)' },
   { id: 'itau_extrato_v1', label: 'Itaú — extrato PDF' },
   { id: 'csv_itau_v1', label: 'Itaú — CSV (;)' },
   { id: 'csv_mercadopago_v1', label: 'Mercado Pago — CSV (,)' },
+  { id: 'csv_inter_v1', label: 'Banco Inter — CSV (;)' },
   { id: 'csv_brazil_v1', label: 'CSV — genérico BR (;)' },
 ]
 
@@ -126,6 +129,7 @@ function runParse(parserId: ParserId, text: string) {
   if (parserId === 'itau_extrato_v1') return parseItauExtrato(text)
   if (parserId === 'mercadopago_extrato_v1') return parseMercadoPagoExtrato(text)
   if (parserId === 'csv_finance_pwa_v1') return parseFinancePwaCsv(text)
+  if (parserId === 'csv_inter_v1') return parseInterCsv(text)
   return parseCsvBrazil(text, csvProfileFor(parserId))
 }
 
@@ -573,8 +577,11 @@ export function ImportPage() {
           'csv_brazil_v1',
           'csv_itau_v1',
           'csv_mercadopago_v1',
+          'csv_inter_v1',
         ]
-        if (csvModes.includes(parserFallback)) {
+        if (looksLikeInterCsv(text)) {
+          parserId = 'csv_inter_v1'
+        } else if (csvModes.includes(parserFallback)) {
           parserId = parserFallback
         } else if (looksLikeNubankPlanilha) {
           parserId = 'csv_nubank_planilha_v1'
@@ -605,6 +612,24 @@ export function ImportPage() {
           setDetectedBank(fatura.bank ? `Fatura ${fatura.bank}` : 'Fatura de cartão')
           setWarnings(fatura.warnings)
           setDrafts(enrichDrafts(flagged, ruleRows.filter((x) => x.enabled), categoryRows))
+          setStep('review')
+          return
+        }
+
+        // extrato da conta Banco Inter: datas por extenso, valor e saldo após cada transação
+        if (parserId === 'inter_extrato_v1') {
+          const inter = parseInterPdfLayout(await extractPdfLayout(buf))
+          if (inter.drafts.length === 0) {
+            setFileError(`Reconheci o extrato do Banco Inter, mas não achei os lançamentos. ${inter.warnings.join(' ')}`)
+            return
+          }
+          setLastParserId(parserId)
+          setDetectedBank('Extrato Banco Inter (conta)')
+          if (inter.holderName && inter.holderName.split(/\s+/).length >= 2 && !user.user_metadata?.owner_name) {
+            void supabase.auth.updateUser({ data: { owner_name: inter.holderName } })
+          }
+          setWarnings(inter.warnings)
+          setDrafts(enrichDrafts(await flagPossibleDuplicates(user.id, inter.drafts), ruleRows.filter((x) => x.enabled), categoryRows))
           setStep('review')
           return
         }
