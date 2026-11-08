@@ -50,11 +50,14 @@ function innerDate(posted: string, dd: string, mm: string): string | null {
  * data · lançamento · valor (R$) · saldo (R$). Linhas "SALDO DO DIA" são saldo, não transação;
  * o sinal do valor decide entrada/saída. Confere a soma de cada dia contra a variação do saldo.
  */
-export function parseItauExtratoLayout(pages: Page[]): ParseResult & { balanceChecked?: number; balanceMismatches?: number } {
+export function parseItauExtratoLayout(
+  pages: Page[],
+): ParseResult & { balanceChecked?: number; balanceMismatches?: number; holderName?: string | null } {
   const warnings: string[] = []
   const drafts: ParseResult['drafts'] = []
   let periodEnd: string | null = null
   let holderFirst: string | null = null
+  let holderName: string | null = null
   const saldoByDate = new Map<string, number>()
   const valuesByDate = new Map<string, number>()
   let seq = 0
@@ -65,8 +68,11 @@ export function parseItauExtratoLayout(pages: Page[]): ParseResult & { balanceCh
     const period = line.match(/per[ií]odo de visualiza[cç][aã]o:?\s*\d{2}\/\d{2}\/\d{4}\s*at[eé]\s*(\d{2}\/\d{2}\/\d{4})/i)
     if (period && !periodEnd) periodEnd = parseBrazilianDate(period[1]!)
     // "Guilherme de Luca Santos 000.000.000-00 agência: 0000 conta: 00000-0"
-    const holder = !holderFirst && line.match(/^([A-Za-zÀ-ÿ]{3,})(?:\s+[A-Za-zÀ-ÿ]+)*\s+[\d.*]{3,}[\d.*-]*\s+ag[eê]ncia/i)
-    if (holder) holderFirst = holder[1]!.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+    const holder: RegExpMatchArray | null = holderFirst ? null : line.match(/^([A-Za-zÀ-ÿ]{3,})(?:\s+[A-Za-zÀ-ÿ]+)*\s+[\d.*]{3,}[\d.*-]*\s+ag[eê]ncia/i)
+    if (holder) {
+      holderFirst = holder[1]!.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+      holderName = line.match(/^([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)/)?.[1]?.trim() ?? null
+    }
   }
 
   {
@@ -150,5 +156,5 @@ export function parseItauExtratoLayout(pages: Page[]): ParseResult & { balanceCh
       `Conferi com o saldo: ${checked - mismatches} de ${checked} períodos batem. Não batem (pode ser lançamento estornado pelo banco): ${mismatchRanges.slice(0, 5).join(', ')}.`,
     )
   }
-  return { drafts, warnings, balanceChecked: checked, balanceMismatches: mismatches }
+  return { drafts, warnings, balanceChecked: checked, balanceMismatches: mismatches, holderName }
 }

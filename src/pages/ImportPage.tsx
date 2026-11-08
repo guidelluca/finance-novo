@@ -14,7 +14,7 @@ import {
   resolveImportCategoryHint,
 } from '@/lib/categoryImportHint'
 import { accountLabelFromImport } from '@/lib/importAccount'
-import { transactionContentFingerprint, transactionDedupCandidates } from '@/lib/dedupKey'
+import { normalizeTransactionLogicalDescription, transactionContentFingerprint, transactionDedupCandidates } from '@/lib/dedupKey'
 import {
   extractTransactionsFromImages,
   fileToVisionImage,
@@ -180,28 +180,62 @@ async function fetchTxRange<T>(userId: string, from: string, to: string, columns
   return out
 }
 
+/**
+ * Compara com o que já está salvo (mesma data, valor e tipo):
+ * - descrição igual → é o mesmo lançamento (arquivo importado de novo): desmarca;
+ * - descrição diferente (outra fonte: print × fatura, Nubank × Itaú) → importa mesmo assim,
+ *   sinalizado; o consolidado só passa a contar quando você confirmar que não é repetida.
+ */
 async function flagPossibleDuplicates(userId: string, drafts: TransactionDraft[]): Promise<TransactionDraft[]> {
   if (drafts.length === 0) return drafts
   const dates = drafts.map((d) => d.date).sort()
-  type Row = { date: string; amount_cents: number; kind: string; description_raw: string }
+  type Row = { date: string; amount_cents: number; kind: string; description_raw: string; description_normalized: string | null }
   let data: Row[]
   try {
-    data = await fetchTxRange<Row>(userId, dates[0]!, dates[dates.length - 1]!, 'date, amount_cents, kind, description_raw')
+    data = await fetchTxRange<Row>(
+      userId,
+      shiftIso(dates[0]!, -1),
+      shiftIso(dates[dates.length - 1]!, 1),
+      'date, amount_cents, kind, description_raw, description_normalized',
+    )
   } catch {
     return drafts
   }
+  const logical = (raw: string, norm: string | null) => normalizeTransactionLogicalDescription(norm ?? raw.toLowerCase(), raw)
   // conta quantas já existem por data+valor+tipo: 2 Ubers iguais no arquivo e 1 salvo → só 1 é desmarcado
-  const existing = new Map<string, string[]>()
+  const exact = new Map<string, number>()
+  const near = new Map<string, Row[]>()
   for (const t of data) {
-    const k = `${t.date}|${t.amount_cents}|${t.kind}`
-    existing.set(k, [...(existing.get(k) ?? []), t.description_raw])
+    const ek = `${t.date}|${t.amount_cents}|${t.kind}|${logical(t.description_raw, t.description_normalized)}`
+    exact.set(ek, (exact.get(ek) ?? 0) + 1)
+    for (const dd of [-1, 0, 1]) {
+      const nk = `${shiftIso(t.date, dd)}|${t.amount_cents}|${t.kind}`
+      near.set(nk, [...(near.get(nk) ?? []), t])
+    }
   }
   return drafts.map((d) => {
-    const list = existing.get(`${d.date}|${d.amountCents}|${d.kind}`)
-    const hit = list?.shift()
-    if (hit === undefined) return d
-    return { ...d, excluded: true, reviewFlags: [...(d.reviewFlags ?? []), `já existe: “${hit.slice(0, 40)}”`] }
+    const ek = `${d.date}|${d.amountCents}|${d.kind}|${logical(d.descriptionRaw, null)}`
+    const n = exact.get(ek) ?? 0
+    if (n > 0) {
+      exact.set(ek, n - 1)
+      return { ...d, excluded: true, reviewFlags: [...(d.reviewFlags ?? []), 'já está salvo (igual)'] }
+    }
+    const other = near.get(`${d.date}|${d.amountCents}|${d.kind}`)?.[0]
+    if (!other) return d
+    return {
+      ...d,
+      reviewFlags: [
+        ...(d.reviewFlags ?? []),
+        `possível repetida de “${identifyMerchant(other.description_raw).name.slice(0, 40)}” (${other.date.slice(8)}/${other.date.slice(5, 7)}): entra, mas só conta quando você confirmar`,
+      ],
+    }
   })
+}
+
+function shiftIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
 }
 
 function isDocFile(f: File): boolean {
@@ -533,6 +567,10 @@ export function ImportPage() {
             const flagged = await flagPossibleDuplicates(user.id, ext.drafts)
             setLastParserId(parserId)
             setDetectedBank('Extrato Itaú (conta)')
+            // guarda o nome do titular: Pix para esse nome em outros bancos = transferência entre suas contas
+            if (ext.holderName && ext.holderName.split(/\s+/).length >= 2 && user.user_metadata?.owner_name !== ext.holderName) {
+              void supabase.auth.updateUser({ data: { owner_name: ext.holderName } })
+            }
             setWarnings(ext.warnings)
             setDrafts(enrichDrafts(flagged, ruleRows.filter((x) => x.enabled), categoryRows))
             setStep('review')
@@ -746,13 +784,33 @@ export function ImportPage() {
           return true
         })
         .map((p) => p.row)
-      const skipped = prepared.length - rows.length
+      let skipped = prepared.length - rows.length
 
+      let conflictSkipped = 0
       const { error: tErr } = await supabase.from('transactions').upsert(rows, {
         onConflict: 'user_id,logical_fingerprint',
         ignoreDuplicates: true,
       })
-      if (tErr) throw tErr
+      if (tErr) {
+        if (tErr.code !== '23505') throw tErr
+        // uma linha bateu em outra chave única (dedup_key): grava uma a uma e pula só as que já existem
+        for (let i = 0; i < rows.length; i += 25) {
+          const chunk = rows.slice(i, i + 25)
+          const { error: cErr } = await supabase
+            .from('transactions')
+            .upsert(chunk, { onConflict: 'user_id,logical_fingerprint', ignoreDuplicates: true })
+          if (!cErr) continue
+          if (cErr.code !== '23505') throw cErr
+          for (const row of chunk) {
+            const { error: rErr } = await supabase
+              .from('transactions')
+              .upsert([row], { onConflict: 'user_id,logical_fingerprint', ignoreDuplicates: true })
+            if (rErr && rErr.code !== '23505') throw rErr
+            if (rErr) conflictSkipped += 1
+            else inserted = true
+          }
+        }
+      }
       inserted = true
 
       const learned = learnFromCorrections
@@ -763,15 +821,21 @@ export function ImportPage() {
               .map((d) => ({ key: d.merchantRuleKey, categoryId: d.categoryId! })),
           )
         : 0
+      skipped += conflictSkipped
+      const savedCount = rows.length - conflictSkipped
+      const possibleDup = toSave.filter((d) => d.reviewFlags?.some((f) => f.startsWith('possível repetida'))).length
       const linkedCards = rows.filter((r) => r.credit_card_id).length
       const extra =
+        (possibleDup
+          ? ` ${possibleDup} possível(is) repetida(s) entraram sem contar nos totais: confirme no Extrato ou no Mês.`
+          : '') +
         (linkedCards ? ` ${linkedCards} ligados ao cartão cadastrado.` : '') +
         (learned ? ` ${learned} regra(s) aprendida(s) com suas correções.` : '')
       setSaveNotice(
         (skipped > 0
-          ? `${rows.length} lançamento(s) gravados. ${skipped} ignorado(s) (já existiam ou linha repetida no arquivo).`
-          : rows.length > 0
-            ? `${rows.length} lançamento(s) gravados.`
+          ? `${savedCount} lançamento(s) gravados. ${skipped} ignorado(s) (já estavam salvos, idênticos).`
+          : savedCount > 0
+            ? `${savedCount} lançamento(s) gravados.`
             : '') + extra || null,
       )
       setDetectedBank(null)

@@ -115,8 +115,15 @@ export function useMonthData(month: string) {
   }, [user, rows])
 
   const result = useMemo(
-    () => consolidateMonth(month, monthTxs, history, format(new Date(), 'yyyy-MM-dd'), dismissed),
-    [month, monthTxs, history, dismissed],
+    () => consolidateMonth(
+        month,
+        monthTxs,
+        history,
+        format(new Date(), 'yyyy-MM-dd'),
+        dismissed,
+        (user?.user_metadata?.owner_name as string | undefined) ?? null,
+      ),
+    [month, monthTxs, history, dismissed, user],
   )
 
   return { loading, error, categories, result, monthTxs, history, reload: load }

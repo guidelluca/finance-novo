@@ -11,18 +11,18 @@ import { formatBRLFromCents } from '@/lib/currency'
 import { normalizeTransactionLogicalDescription, transactionDedupCandidates } from '@/lib/dedupKey'
 import { learnRules } from '@/lib/learnRules'
 import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
-import { shiftMonth, type ExcludedReason } from '@/lib/monthConsolidation'
+import { issueId, shiftMonth, type ExcludedReason } from '@/lib/monthConsolidation'
 import { suggestCategoryId } from '@/lib/rulesEngine'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { tileColors } from '@/pages/HomePage'
 import type { Category, Rule, Transaction } from '@/types/database'
 
-type Chip = 'all' | 'out' | 'in' | 'none'
+type Chip = 'all' | 'out' | 'in' | 'none' | 'dup'
 type Form = { date: string; description: string; amount: string; kind: 'debit' | 'credit'; categoryId: string; account: string }
 
 const EXCLUDED_LABEL: Record<ExcludedReason, string> = {
-  duplicada: 'repetida — não conta',
+  duplicada: 'repetida? — só conta se você confirmar',
   pagamento_fatura: 'pagamento de fatura — não conta',
   transferencia_interna: 'entre suas contas — não conta',
   investimento: 'aplicação — não conta',
@@ -123,6 +123,7 @@ export function ExtratoPage() {
       if (chip === 'out' && t.kind !== 'debit') return false
       if (chip === 'in' && t.kind !== 'credit') return false
       if (chip === 'none' && (t.category_id || t.kind !== 'debit' || !counts(t))) return false
+      if (chip === 'dup' && excludedById.get(t.id)?.reason !== 'duplicada') return false
       if (!nq) return true
       const hay = norm(`${merchantOf(t)} ${t.description_raw} ${catName.get(t.category_id ?? '') ?? ''} ${t.account ?? ''} ${(t.amount_cents / 100).toFixed(2).replace('.', ',')}`)
       return hay.includes(nq)
@@ -208,6 +209,23 @@ export function ExtratoPage() {
     reloadAll()
   }
 
+  /** "Não é repetida": passa a contar (mesma marcação do Mês consolidado). */
+  const confirmNotDuplicate = (t: Transaction, keepId: string) => {
+    if (!user) return
+    const key = `finance:dismissed:${user.id}`
+    try {
+      const cur = new Set(JSON.parse(localStorage.getItem(key) ?? '[]') as string[])
+      cur.add(issueId('duplicada', [keepId, t.id]))
+      localStorage.setItem(key, JSON.stringify([...cur]))
+    } catch {
+      setError('Não consegui guardar a confirmação neste navegador.')
+      return
+    }
+    setOpenId(null)
+    setNotice(`${merchantOf(t)} agora conta nos totais.`)
+    void consReload()
+  }
+
   const remove = async (t: Transaction) => {
     const { error: e } = await supabase.from('transactions').delete().eq('id', t.id)
     if (e) setError(e.message)
@@ -268,6 +286,7 @@ export function ExtratoPage() {
     else reloadAll()
   }
 
+  const dupCount = cons.result.excluded.filter((e) => e.reason === 'duplicada').length
   const pending = uncategorized[0]
   const pendingSuggestion = pending ? suggestFor(pending) : null
   const monthLabel = format(parseISO(`${month}-01`), "LLLL 'de' yyyy", { locale: ptBR })
@@ -277,6 +296,7 @@ export function ExtratoPage() {
     { id: 'out', label: 'Saídas' },
     { id: 'in', label: 'Entradas' },
     { id: 'none', label: `Sem categoria${uncategorized.length ? ` · ${uncategorized.length}` : ''}` },
+    ...(dupCount > 0 || chip === 'dup' ? [{ id: 'dup' as const, label: `Repetidas? · ${dupCount}` }] : []),
   ]
 
   const formFields = (f: Form, set: (f: Form) => void) => (
@@ -479,6 +499,16 @@ export function ExtratoPage() {
                       <div className="space-y-3 px-2.5 pb-3">
                         <p className="truncate font-mono text-[11px] text-muted">{t.description_raw}</p>
                         {ex ? <p className="text-xs text-muted">{ex.note}</p> : null}
+                        {ex?.reason === 'duplicada' && ex.relatedId ? (
+                          <div className="flex flex-wrap gap-2 rounded-xl bg-background p-2.5">
+                            <Button size="sm" variant="secondary" onClick={() => confirmNotDuplicate(t, ex.relatedId!)}>
+                              Não é repetida — contar
+                            </Button>
+                            <Button size="sm" variant="ghost" className="text-danger" onClick={() => void remove(t)}>
+                              <Trash2 className="size-4" /> É repetida — apagar
+                            </Button>
+                          </div>
+                        ) : null}
                         {formFields(edit, setEdit)}
                         <div className="flex flex-wrap gap-2">
                           <Button size="sm" onClick={() => void saveEdit(t)} disabled={busy}>

@@ -155,8 +155,10 @@ export function MonthPage() {
       all.filter((t) => t.date < `${month}-01`),
       format(new Date(), 'yyyy-MM-dd'),
       dismissed,
+      (user?.user_metadata?.owner_name as string | undefined) ?? null,
     )
-  }, [rows, parserByBatch, catName, month, dismissed])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, parserByBatch, catName, month, dismissed, user])
 
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows])
 
@@ -381,7 +383,7 @@ export function MonthPage() {
                               Apagar a repetida
                             </Button>
                             <Button size="sm" variant="ghost" onClick={() => dismiss(issue)}>
-                              Não é repetida (são 2 compras)
+                              Não é repetida — contar as duas
                             </Button>
                           </>
                         ) : null}

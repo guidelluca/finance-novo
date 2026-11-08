@@ -88,6 +88,7 @@ const CARD_PAYMENT =
 const INVESTMENT =
   /\b(aplica[cç][aã]o|resgate|rdb|cdb|lci|lca|tesouro direto|poupan[cç]a|caixinha|cofrinho|porquinho|investimento|guardado|guardar dinheiro)\b/i
 const SELF_TRANSFER = /conta pr[oó]pria|mesma titularidade/i
+const fold = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
 const TRANSFER_HINT = /\b(pix|transf|transfer[eê]ncia|ted|doc)\b/i
 const FEE = /\b(anuidade|tarifa|juros|multa|encargo|mora|iof|cesta de servi[cç]os|pacote de servi[cç]os)\b/i
 const APP_RIDE = /uber|\b99\b|99 \(|cabify|indrive/i
@@ -173,6 +174,8 @@ export function consolidateMonth(
   today: string,
   /** ids de alertas que o usuário marcou como "está certo" / "não é repetida" */
   dismissed: Set<string> = new Set(),
+  /** nome do titular (do cabeçalho do extrato): Pix para esse nome = entre suas contas */
+  ownerName: string | null = null,
 ): ConsolidatedMonth {
   const items = monthTxs.filter((t) => monthOf(t.date) === month).map(enrich)
   const hist = history.filter((t) => t.date < `${month}-01`).map(enrich)
@@ -188,8 +191,11 @@ export function consolidateMonth(
   }
 
   // 1b) Pix/TED para você mesmo (o leitor do extrato marca "conta própria" pelo nome do titular)
+  const ownName = ownerName ? fold(ownerName) : null
+  const isSelf = (desc: string) =>
+    SELF_TRANSFER.test(desc) || Boolean(ownName && ownName.includes(' ') && TRANSFER_HINT.test(desc) && fold(desc).includes(ownName))
   for (const t of items) {
-    if (excluded.has(t.id) || !SELF_TRANSFER.test(t.description)) continue
+    if (excluded.has(t.id) || !isSelf(t.description)) continue
     exclude(t, 'transferencia_interna', t.kind === 'debit' ? 'Pix para outra conta sua' : 'Pix vindo de outra conta sua')
   }
 
@@ -238,31 +244,29 @@ export function consolidateMonth(
   for (const { a, b, score } of pairs) {
     if (paired.has(a.id) || paired.has(b.id)) continue
     const strong = score >= 10 // mesmo estabelecimento, mesmo valor, até 3 dias
-    if (strong && dismissed.has(issueId('duplicada', [a.id, b.id]))) continue // usuário disse: são 2 compras
-    if (strong) {
-      const [keep, drop] =
-        SOURCE_PRIORITY[a.source] >= SOURCE_PRIORITY[b.source] ? [a, b] : [b, a]
-      paired.add(a.id)
-      paired.add(b.id)
-      exclude(drop, 'duplicada', `Mesma compra já contada (${keep.account ?? keep.source}, ${keep.date.slice(8)}/${keep.date.slice(5, 7)})`, keep.id)
-      issues.push({
-        id: issueId('duplicada', [keep.id, drop.id]),
-        type: 'duplicada',
-        severity: 'media',
-        title: `Repetida: ${keep.merchant} · ${brl(keep.amountCents)}`,
-        detail: `Aparece em duas importações (${keep.account ?? keep.source} e ${drop.account ?? drop.source}). Contei uma vez só. Se forem duas compras de verdade, marque "não é repetida".`,
-        txIds: [keep.id, drop.id],
-      })
-    } else if (dayDiff(a.date, b.date) <= 1 && !APP_RIDE.test(a.merchant + b.merchant)) {
-      issues.push({
-        id: issueId('possivel_duplicada', [a.id, b.id]),
-        type: 'possivel_duplicada',
-        severity: 'baixa',
-        title: `Talvez repetida: ${brl(a.amountCents)} em ${a.merchant} e ${b.merchant}`,
-        detail: 'Mesmo valor, datas próximas e fontes diferentes, mas nomes diferentes. Confira se é a mesma compra.',
-        txIds: [a.id, b.id],
-      })
-    }
+    // nomes diferentes: só considera se for até 1 dia
+    if (!strong && dayDiff(a.date, b.date) > 1) continue
+    const [keep, drop] = SOURCE_PRIORITY[a.source] >= SOURCE_PRIORITY[b.source] ? [a, b] : [b, a]
+    const id = issueId('duplicada', [keep.id, drop.id])
+    if (dismissed.has(id)) continue // usuário confirmou: são 2 lançamentos, os dois contam
+    paired.add(a.id)
+    paired.add(b.id)
+    exclude(
+      drop,
+      'duplicada',
+      `${strong ? 'Repetida' : 'Possível repetida'} de ${keep.merchant} (${keep.account ?? keep.source}, ${keep.date.slice(8)}/${keep.date.slice(5, 7)}). Não está contando até você confirmar.`,
+      keep.id,
+    )
+    issues.push({
+      id,
+      type: 'duplicada',
+      severity: strong ? 'media' : 'baixa',
+      title: `${strong ? 'Repetida' : 'Possível repetida'}: ${keep.merchant} · ${brl(keep.amountCents)}`,
+      detail: strong
+        ? `Aparece em duas importações (${keep.account ?? keep.source} e ${drop.account ?? drop.source}). Contei uma vez só. Se forem dois lançamentos de verdade, toque em "Não é repetida".`
+        : `Mesmo valor e data em ${keep.account ?? keep.source} e ${drop.account ?? drop.source}, com nomes diferentes (${keep.merchant} × ${drop.merchant}). Deixei só um contando até você confirmar.`,
+      txIds: [keep.id, drop.id],
+    })
   }
 
   // 4) Transferência entre contas próprias: saída numa conta + entrada igual em outra
@@ -292,6 +296,23 @@ export function consolidateMonth(
       detail: `${d.account} → ${c.account}. Tirei da soma de gastos e de entradas. Se foi para outra pessoa, marque como não.`,
       txIds: [d.id, c.id],
     })
+  }
+
+  // 4b) O outro lado de um Pix para você mesmo (ex.: saiu do Itaú "conta própria", entrou no Nubank)
+  for (const t of items) {
+    if (excluded.has(t.id)) continue
+    const mirror = items.find(
+      (x) =>
+        excluded.get(x.id)?.reason === 'transferencia_interna' &&
+        !excluded.get(x.id)?.relatedId &&
+        x.kind !== t.kind &&
+        x.amountCents === t.amountCents &&
+        x.account !== t.account &&
+        dayDiff(x.date, t.date) <= 1,
+    )
+    if (!mirror) continue
+    exclude(t, 'transferencia_interna', t.kind === 'credit' ? `Veio de ${mirror.account}` : `Foi para ${mirror.account}`, mirror.id)
+    excluded.get(mirror.id)!.relatedId = t.id
   }
 
   const included = items.filter((t) => !excluded.has(t.id))
