@@ -25,7 +25,7 @@ import { CSV_PROFILES, parseCsvBrazil, parseFinancePwaCsv, type CsvProfileId } f
 import { detectParser } from '@/parsers/detect'
 import { parseControleGastosExtrato } from '@/parsers/controleGastosExtrato'
 import { parseItauExtrato } from '@/parsers/itauExtrato'
-import { parseItauExtratoLayout } from '@/parsers/itauExtratoLayout'
+import { parseItauExtratoLayout, type BalanceMismatch } from '@/parsers/itauExtratoLayout'
 import { parseMercadoPagoExtrato } from '@/parsers/mercadoPagoExtrato'
 import { parseNubankExtrato } from '@/parsers/nubankExtrato'
 import { extractPdfLayout, extractPdfText } from '@/parsers/pdfText'
@@ -36,7 +36,7 @@ import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
 import { learnRules } from '@/lib/learnRules'
 import type { ParserId, TransactionDraft } from '@/parsers/types'
 import type { Category, ImportBatch, ImportFile, Rule } from '@/types/database'
-import { parseMoneyToCents } from '@/lib/currency'
+import { formatBRLFromCents, parseMoneyToCents } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { Link, useSearchParams } from 'react-router-dom'
 import { matchAccount, readAccounts } from '@/lib/accounts'
@@ -330,6 +330,8 @@ export function ImportPage() {
   /** importação antiga do mesmo extrato (lida com o leitor antigo) que pode ser substituída */
   const [replaceOld, setReplaceOld] = useState<{ rows: OldRow[]; full: unknown[] } | null>(null)
   const [replaceChecked, setReplaceChecked] = useState(true)
+  /** períodos do extrato em que a soma dos lançamentos não bate com o saldo */
+  const [mismatches, setMismatches] = useState<BalanceMismatch[]>([])
   const restoreReplacedRef = useRef<() => Promise<void>>(async () => {})
   const parseFileRef = useRef<(f?: File) => Promise<void>>(async () => {})
 
@@ -535,6 +537,7 @@ export function ImportPage() {
     setWarnings([])
     setFileError(null)
     setReplaceOld(null)
+    setMismatches([])
     setReplaceChecked(true)
     setSaveNotice(null)
     setProgress(/\.pdf$/i.test(file.name) ? 'Lendo o PDF…' : 'Lendo o arquivo…')
@@ -624,6 +627,7 @@ export function ImportPage() {
               void supabase.auth.updateUser({ data: { owner_name: ext.holderName } })
             }
             setWarnings(ext.warnings)
+            setMismatches(ext.mismatchDetails ?? [])
             setDrafts(
               enrichDrafts(flagged, ruleRows.filter((x) => x.enabled), categoryRows).map((d) => {
                 const c = oldCat.get(`${d.date}|${d.amountCents}|${d.kind}`)
@@ -1399,6 +1403,50 @@ export function ImportPage() {
                   <li key={w}>{w}</li>
                 ))}
               </ul>
+            ) : null}
+            {mismatches.length ? (
+              <div className="space-y-2.5">
+                {mismatches.map((mm) => {
+                  const fmtD = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+                  const diff = mm.balanceDeltaCents - mm.sumCents
+                  const list = drafts.filter((d) => mm.draftIds.includes(d.tempId))
+                  const signed = (d: TransactionDraft) => (d.kind === 'credit' ? d.amountCents : -d.amountCents)
+                  // provável culpado: um lançamento do período com exatamente o valor da diferença
+                  const suspect = list.find((d) => Math.abs(signed(d)) === Math.abs(diff))
+                  return (
+                    <details key={`${mm.from}-${mm.to}`} open className="rounded-xl border border-warning/40 bg-surface p-3 text-sm">
+                      <summary className="cursor-pointer font-semibold">
+                        {fmtD(mm.from)} a {fmtD(mm.to)}: diferença de {formatBRLFromCents(Math.abs(diff))}
+                      </summary>
+                      <p className="mt-1.5 text-xs text-muted">
+                        O saldo variou {diff + mm.sumCents >= 0 ? '+' : '−'}
+                        {formatBRLFromCents(Math.abs(mm.balanceDeltaCents))}, mas os lançamentos somam {mm.sumCents >= 0 ? '+' : '−'}
+                        {formatBRLFromCents(Math.abs(mm.sumCents))}.{' '}
+                        {suspect
+                          ? `Provável causa: “${suspect.descriptionRaw}” (${formatBRLFromCents(suspect.amountCents)}) — pode ter sido estornado ou não afetou o saldo. Se for o caso, desmarque.`
+                          : list.length === 0
+                            ? 'Nenhum lançamento lido neste trecho: falta alguma linha no PDF?'
+                            : 'Confira estes lançamentos no app do banco:'}
+                      </p>
+                      {list.length ? (
+                        <ul className="mt-2 divide-y divide-border">
+                          {list.map((d) => (
+                            <li key={d.tempId} className={cn('flex items-center gap-2 py-1.5', suspect?.tempId === d.tempId && 'font-semibold text-warning')}>
+                              <span className="w-12 shrink-0 text-xs text-muted">{fmtD(d.date)}</span>
+                              <span className="min-w-0 flex-1 truncate">{d.merchantName ?? d.descriptionRaw}</span>
+                              <span className={cn('shrink-0 tabular-nums', d.kind === 'credit' && 'text-positive')}>
+                                {d.kind === 'credit' ? '+' : '−'}
+                                {formatBRLFromCents(d.amountCents)}
+                              </span>
+                              {d.excluded ? <span className="text-xs text-muted">(desmarcado)</span> : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </details>
+                  )
+                })}
+              </div>
             ) : null}
             <label className="flex items-center gap-2 text-xs text-muted">
               <input

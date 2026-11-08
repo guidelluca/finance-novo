@@ -45,6 +45,17 @@ function innerDate(posted: string, dd: string, mm: string): string | null {
   return null
 }
 
+export type BalanceMismatch = {
+  from: string
+  to: string
+  /** variação do saldo no período (centavos, com sinal) */
+  balanceDeltaCents: number
+  /** soma dos lançamentos lidos no período (centavos, com sinal) */
+  sumCents: number
+  /** tempIds dos lançamentos do período */
+  draftIds: string[]
+}
+
 /**
  * Extrato de conta Itaú (PDF "extrato conta / lançamentos"), lido linha a linha pela posição:
  * data · lançamento · valor (R$) · saldo (R$). Linhas "SALDO DO DIA" são saldo, não transação;
@@ -52,7 +63,12 @@ function innerDate(posted: string, dd: string, mm: string): string | null {
  */
 export function parseItauExtratoLayout(
   pages: Page[],
-): ParseResult & { balanceChecked?: number; balanceMismatches?: number; holderName?: string | null } {
+): ParseResult & {
+  balanceChecked?: number
+  balanceMismatches?: number
+  holderName?: string | null
+  mismatchDetails?: BalanceMismatch[]
+} {
   const warnings: string[] = []
   const drafts: ParseResult['drafts'] = []
   let periodEnd: string | null = null
@@ -60,6 +76,7 @@ export function parseItauExtratoLayout(
   let holderName: string | null = null
   const saldoByDate = new Map<string, number>()
   const valuesByDate = new Map<string, number>()
+  const idsByPosted = new Map<string, string[]>()
   let seq = 0
 
   const allLines = pages.flatMap((page) => pageLines(page))
@@ -117,6 +134,7 @@ export function parseItauExtratoLayout(
         if (holderFirst.startsWith(who)) desc = `${desc} · conta própria`
       }
       seq += 1
+      idsByPosted.set(posted, [...(idsByPosted.get(posted) ?? []), `itl-${seq}`])
       drafts.push({
         tempId: `itl-${seq}`,
         date,
@@ -132,6 +150,7 @@ export function parseItauExtratoLayout(
   let checked = 0
   let mismatches = 0
   const mismatchRanges: string[] = []
+  const mismatchDetails: BalanceMismatch[] = []
   const fmt = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
   for (let i = 1; i < saldoDates.length; i++) {
     const a = saldoDates[i - 1]!
@@ -144,6 +163,26 @@ export function parseItauExtratoLayout(
     if (saldoByDate.get(b)! - saldoByDate.get(a)! !== sum) {
       mismatches += 1
       mismatchRanges.push(`${fmt(a)}–${fmt(b)}`)
+      const ids: string[] = []
+      for (const [d, list] of idsByPosted) if (d > a && (d <= b || last)) ids.push(...list)
+      mismatchDetails.push({
+        from: a,
+        to: b,
+        balanceDeltaCents: saldoByDate.get(b)! - saldoByDate.get(a)!,
+        sumCents: sum,
+        draftIds: ids,
+      })
+    }
+  }
+
+  // dois períodos seguidos com diferenças que se anulam = lançamento contado pelo banco no dia seguinte
+  for (let i = 0; i + 1 < mismatchDetails.length; i++) {
+    const x = mismatchDetails[i]!
+    const y = mismatchDetails[i + 1]!
+    if (x.to === y.from && x.balanceDeltaCents - x.sumCents + (y.balanceDeltaCents - y.sumCents) === 0) {
+      mismatchDetails.splice(i, 2)
+      mismatches -= 2
+      i -= 1
     }
   }
 
@@ -153,8 +192,8 @@ export function parseItauExtratoLayout(
     warnings.push(`Conferido: os ${drafts.length} lançamentos batem com o saldo de todos os ${checked} dias do extrato.`)
   } else if (mismatches > 0) {
     warnings.push(
-      `Conferi com o saldo: ${checked - mismatches} de ${checked} períodos batem. Não batem (pode ser lançamento estornado pelo banco): ${mismatchRanges.slice(0, 5).join(', ')}.`,
+      `Conferi com o saldo: ${checked - mismatches} de ${checked} períodos batem. Os que não batem estão listados abaixo, com os lançamentos de cada um.`,
     )
   }
-  return { drafts, warnings, balanceChecked: checked, balanceMismatches: mismatches, holderName }
+  return { drafts, warnings, balanceChecked: checked, balanceMismatches: mismatches, holderName, mismatchDetails }
 }
