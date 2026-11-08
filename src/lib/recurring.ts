@@ -27,7 +27,14 @@ function keyOf(name: string): string {
 function asItem(t: ConsTx): ConsItem {
   const m = identifyMerchant(t.description)
   const name = t.merchantName?.trim() || m.name
-  return { ...t, merchant: name, merchantKey: keyOf(name), merchantKind: m.kind }
+  return {
+    ...t,
+    merchant: name,
+    merchantKey: keyOf(name),
+    merchantKind: m.kind,
+    expectedCategories: m.categories,
+    ruleKey: m.ruleKey,
+  }
 }
 
 function median(xs: number[]): number {
