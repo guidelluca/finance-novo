@@ -1,12 +1,14 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Check, ChevronLeft, ChevronRight, CircleDashed, Mail, Plus, TriangleAlert, Trash2, Upload } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCoverage } from '@/hooks/useCoverage'
 import { useMonthData } from '@/hooks/useMonthData'
+import { usePeriods } from '@/hooks/usePeriods'
+import { saveMonthMode } from '@/lib/period'
 import { saveAccounts, setCoverageMark, type AccountCoverage, type TrackedAccount } from '@/lib/accounts'
 import { shiftMonth } from '@/lib/monthConsolidation'
 import { cn } from '@/lib/utils'
@@ -28,9 +30,19 @@ function statusText(c: AccountCoverage): string {
 
 export function FechamentoPage() {
   const { user } = useAuth()
-  const today = format(new Date(), 'yyyy-MM-dd')
-  // até o dia 10, o mês a fechar é o anterior
-  const [month, setMonth] = useState(() => (Number(today.slice(8)) <= 10 ? shiftMonth(today.slice(0, 7), -1) : today.slice(0, 7)))
+  const periods = usePeriods()
+  // nos 10 primeiros dias do mês financeiro, o mês a fechar é o anterior
+  const toClose = useMemo(() => {
+    const start = periods.rangeOf(periods.current).start
+    const elapsed = (Date.parse(`${periods.today}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) / 86_400_000
+    return elapsed < 10 ? shiftMonth(periods.current, -1) : periods.current
+  }, [periods])
+  const [month, setMonth] = useState(toClose)
+  const [touched, setTouched] = useState(false)
+  useEffect(() => {
+    if (!touched) setMonth(toClose)
+  }, [toClose, touched])
+  const [modeBusy, setModeBusy] = useState(false)
   const cov = useCoverage(month)
   const cons = useMonthData(month)
   const [busy, setBusy] = useState<string | null>(null)
@@ -84,11 +96,22 @@ export function FechamentoPage() {
       <header className="space-y-3.5">
         <h1 className="text-[30px] font-bold tracking-tight">Fechamento do mês</h1>
         <div className="flex items-center justify-between rounded-2xl border border-border bg-surface px-1">
-          <button type="button" aria-label="Mês anterior" onClick={() => setMonth((m) => shiftMonth(m, -1))} className="flex size-10 items-center justify-center text-muted">
+          <button type="button" aria-label="Mês anterior" onClick={() => {
+            setTouched(true)
+            setMonth((m) => shiftMonth(m, -1))
+          }} className="flex size-10 items-center justify-center text-muted">
             <ChevronLeft className="size-5" />
           </button>
-          <span className="text-sm font-semibold capitalize">{monthLabel}</span>
-          <button type="button" aria-label="Próximo mês" onClick={() => setMonth((m) => shiftMonth(m, 1))} className="flex size-10 items-center justify-center text-muted">
+          <span className="text-center">
+            <span className="block text-sm font-semibold capitalize">{monthLabel}</span>
+            <span className="block text-xs text-muted">
+              {cov.bounds.start.slice(8)}/{cov.bounds.start.slice(5, 7)} a {cov.bounds.end.slice(8)}/{cov.bounds.end.slice(5, 7)}
+            </span>
+          </span>
+          <button type="button" aria-label="Próximo mês" onClick={() => {
+            setTouched(true)
+            setMonth((m) => shiftMonth(m, 1))
+          }} className="flex size-10 items-center justify-center text-muted">
             <ChevronRight className="size-5" />
           </button>
         </div>
@@ -234,6 +257,45 @@ export function FechamentoPage() {
             </Link>
           ))}
         </div>
+      </section>
+
+      <section className="space-y-2.5 rounded-3xl border border-border bg-surface p-4">
+        <h2 className="text-base font-semibold">Quando seu mês começa</h2>
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-background p-1 text-sm" role="radiogroup" aria-label="Início do mês">
+          {(
+            [
+              ['salario', 'No salário do fim do mês'],
+              ['calendario', 'No dia 1'],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={periods.mode === m}
+              disabled={modeBusy}
+              onClick={async () => {
+                setModeBusy(true)
+                try {
+                  await saveMonthMode(m)
+                  setNotice(m === 'salario' ? 'O mês agora começa no dia do salário do fim do mês.' : 'O mês agora vai do dia 1 ao último dia.')
+                } catch (e) {
+                  setNotice(`Não consegui salvar: ${(e as Error).message}`)
+                } finally {
+                  setModeBusy(false)
+                }
+              }}
+              className={cn('rounded-lg px-2 py-2 font-semibold', periods.mode === m ? 'bg-surface shadow-sm' : 'text-muted')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted">
+          {periods.mode === 'salario'
+            ? 'O salário do fim do mês (penúltimo dia útil) já abre o mês seguinte: tudo que entra e sai a partir dele conta para o próximo mês. Uso a data real do salário quando ele está no extrato.'
+            : 'Cada mês vai do dia 1 ao último dia do calendário.'}
+        </p>
       </section>
 
       <section className="flex items-start gap-3 rounded-3xl border border-border bg-surface p-4">

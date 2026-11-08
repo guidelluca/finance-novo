@@ -1,6 +1,7 @@
 import { format } from 'date-fns'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePeriods } from '@/hooks/usePeriods'
 import {
   computeCoverage,
   fetchCoverageTxs,
@@ -13,6 +14,8 @@ import {
 /** Cobertura dos extratos de cada conta acompanhada no mês. */
 export function useCoverage(month: string) {
   const { user } = useAuth()
+  const periods = usePeriods()
+  const bounds = useMemo(() => periods.rangeOf(month), [periods, month])
   const [txs, setTxs] = useState<CoverageTx[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -36,9 +39,9 @@ export function useCoverage(month: string) {
 
   const accounts = useMemo(() => readAccounts(user), [user])
   const coverage: AccountCoverage[] = useMemo(
-    () => computeCoverage(month, accounts, txs, format(new Date(), 'yyyy-MM-dd'), readCoverageMarks(user)),
-    [month, accounts, txs, user],
+    () => computeCoverage(month, accounts, txs, format(new Date(), 'yyyy-MM-dd'), readCoverageMarks(user), bounds),
+    [month, accounts, txs, user, bounds],
   )
   const done = coverage.filter((c) => c.status === 'completo' || c.status === 'em_andamento').length
-  return { loading, error, coverage, accounts, done, total: coverage.length, reload: load }
+  return { loading, error, coverage, accounts, done, total: coverage.length, reload: load, bounds }
 }

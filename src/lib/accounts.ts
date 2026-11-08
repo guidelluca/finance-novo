@@ -118,8 +118,10 @@ export function computeCoverage(
   txs: CoverageTx[],
   today: string,
   marks: Record<string, boolean>,
+  /** mês financeiro (ex.: 29/10–26/11); sem isso, mês do calendário */
+  bounds?: { start: string; end: string },
 ): AccountCoverage[] {
-  const { start, end } = monthBounds(month)
+  const { start, end } = bounds ?? monthBounds(month)
   const inProgress = today < end
   const until = inProgress ? today : end
   const TOL = 4

@@ -1,6 +1,8 @@
-import { endOfMonth, format, parseISO, startOfMonth, subMonths } from 'date-fns'
+import { format } from 'date-fns'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePeriods } from '@/hooks/usePeriods'
+import { shiftMonthKey } from '@/lib/period'
 import { consolidateMonth, type ConsTx, type TxSource } from '@/lib/monthConsolidation'
 import { supabase } from '@/lib/supabase'
 import type { Category } from '@/types/database'
@@ -48,6 +50,8 @@ async function fetchRange(userId: string, from: string, to: string): Promise<Row
 /** Lançamentos do mês + 6 meses de histórico, já consolidados (sem repetição). */
 export function useMonthData(month: string) {
   const { user } = useAuth()
+  const periods = usePeriods()
+  const range = useMemo(() => periods.rangeOf(month), [periods, month])
   const [rows, setRows] = useState<Row[]>([])
   const [parserByBatch, setParserByBatch] = useState<Map<string, string>>(new Map())
   const [categories, setCategories] = useState<Category[]>([])
@@ -55,13 +59,12 @@ export function useMonthData(month: string) {
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!user) return
+    if (!user || !periods.ready) return
     setLoading(true)
     setError(null)
     try {
-      const start = parseISO(`${month}-01`)
-      const from = format(startOfMonth(subMonths(start, 6)), 'yyyy-MM-dd')
-      const to = format(endOfMonth(start), 'yyyy-MM-dd')
+      const from = periods.rangeOf(shiftMonthKey(month, -6)).start
+      const to = range.end
       const [txs, batches, cats] = await Promise.all([
         fetchRange(user.id, from, to),
         supabase.from('import_batches').select('id, parser_id').eq('user_id', user.id),
@@ -75,7 +78,8 @@ export function useMonthData(month: string) {
     } finally {
       setLoading(false)
     }
-  }, [user, month])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, month, periods.ready, range.start, range.end])
 
   useEffect(() => {
     void load()
@@ -98,10 +102,10 @@ export function useMonthData(month: string) {
       cardId: r.credit_card_id,
     }))
     return {
-      monthTxs: all.filter((t) => t.date.startsWith(month)),
-      history: all.filter((t) => t.date < `${month}-01`),
+      monthTxs: all.filter((t) => periods.periodOf(t.date) === month),
+      history: all.filter((t) => periods.periodOf(t.date) < month),
     }
-  }, [rows, parserByBatch, catName, month])
+  }, [rows, parserByBatch, catName, month, periods])
 
   // alertas que o usuário dispensou no "Mês consolidado" também somem do Início e do Orçamento
   const dismissed = useMemo(() => {
@@ -122,9 +126,10 @@ export function useMonthData(month: string) {
         format(new Date(), 'yyyy-MM-dd'),
         dismissed,
         (user?.user_metadata?.owner_name as string | undefined) ?? null,
+        periods.periodOf,
       ),
-    [month, monthTxs, history, dismissed, user],
+    [month, monthTxs, history, dismissed, user, periods],
   )
 
-  return { loading, error, categories, result, monthTxs, history, reload: load }
+  return { loading, error, categories, result, monthTxs, history, reload: load, range, periods }
 }

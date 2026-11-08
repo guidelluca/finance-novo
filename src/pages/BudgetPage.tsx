@@ -1,10 +1,11 @@
-import { format, getDaysInMonth, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMonthData } from '@/hooks/useMonthData'
+import { usePeriods } from '@/hooks/usePeriods'
 import { effectiveTotal, parseBRLToCents, readBudgets, saveBudgets, type Budgets } from '@/lib/budgets'
 import { formatBRLFromCents } from '@/lib/currency'
 import { shiftMonth } from '@/lib/monthConsolidation'
@@ -16,9 +17,14 @@ const brl0 = (c: number) => formatBRLFromCents(c).replace(/,\d\d$/, '')
 
 export function BudgetPage() {
   const { user } = useAuth()
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const [month, setMonth] = useState(() => today.slice(0, 7))
-  const { loading, error, result, categories, monthTxs, history } = useMonthData(month)
+  const periods = usePeriods()
+  const today = periods.today
+  const [month, setMonth] = useState(() => periods.current)
+  const [touched, setTouched] = useState(false)
+  useEffect(() => {
+    if (!touched) setMonth(periods.current)
+  }, [periods.current, touched])
+  const { loading, error, result, categories, monthTxs, history, range } = useMonthData(month)
   const saved = readBudgets(user)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Record<string, string>>({})
@@ -46,9 +52,11 @@ export function BudgetPage() {
 
   const total = effectiveTotal(saved)
   const used = result.totals.expenseCents
-  const isCurrent = month === today.slice(0, 7)
-  const days = getDaysInMonth(parseISO(`${month}-01`))
-  const day = isCurrent ? Number(today.slice(8)) : days
+  const isCurrent = month === periods.current
+  // dias do mês financeiro (começa no salário do fim do mês)
+  const offset = (iso: string) => Math.round((Date.parse(`${iso}T12:00:00Z`) - Date.parse(`${range.start}T12:00:00Z`)) / 86_400_000)
+  const days = offset(range.end) + 1
+  const day = isCurrent ? Math.min(days, offset(today) + 1) : days
   const usedPct = total ? Math.round((used / total) * 100) : 0
   const idealPct = Math.round((day / days) * 100)
   const freePerDay = total ? Math.max(0, Math.round((total - used) / Math.max(1, days - day + (isCurrent ? 1 : 0)))) : 0
@@ -138,14 +146,22 @@ export function BudgetPage() {
     <div className="space-y-3.5 pb-24">
       <header className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1">
-          <button type="button" aria-label="Mês anterior" onClick={() => setMonth((m) => shiftMonth(m, -1))} className="flex size-9 items-center justify-center rounded-xl text-muted hover:bg-surface">
+          <button type="button" aria-label="Mês anterior" onClick={() => {
+            setTouched(true)
+            setMonth((m) => shiftMonth(m, -1))
+          }} className="flex size-9 items-center justify-center rounded-xl text-muted hover:bg-surface">
             <ChevronLeft className="size-4" />
           </button>
           <div>
-            <p className="text-[13px] capitalize text-muted">{monthName}</p>
+            <p className="text-[13px] capitalize text-muted">
+              {monthName} · {range.start.slice(8)}/{range.start.slice(5, 7)}–{range.end.slice(8)}/{range.end.slice(5, 7)}
+            </p>
             <h1 className="text-[30px] font-bold leading-tight tracking-tight">Orçamento</h1>
           </div>
-          <button type="button" aria-label="Próximo mês" onClick={() => setMonth((m) => shiftMonth(m, 1))} className="flex size-9 items-center justify-center rounded-xl text-muted hover:bg-surface">
+          <button type="button" aria-label="Próximo mês" onClick={() => {
+            setTouched(true)
+            setMonth((m) => shiftMonth(m, 1))
+          }} className="flex size-9 items-center justify-center rounded-xl text-muted hover:bg-surface">
             <ChevronRight className="size-4" />
           </button>
         </div>

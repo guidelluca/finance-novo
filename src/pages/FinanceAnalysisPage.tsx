@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FinanceInsightsCard } from '@/components/finance/FinanceInsightsCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePeriods } from '@/hooks/usePeriods'
 import { useFinanceAiContext } from '@/contexts/FinanceAiContext'
 import {
   aggregateByMonth,
@@ -51,7 +52,8 @@ export function FinanceAnalysisPage() {
     loadSummary()
   }, [loadSummary])
 
-  const allMonthsSeries = useMemo(() => aggregateByMonth(summaryRows), [summaryRows])
+  const periods = usePeriods()
+  const allMonthsSeries = useMemo(() => aggregateByMonth(summaryRows, periods.periodOf), [summaryRows, periods])
   const monthKeysWithData = useMemo(() => allMonthsSeries.map((m) => m.key), [allMonthsSeries])
 
   const overviewTotals = useMemo(() => {

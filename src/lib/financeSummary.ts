@@ -25,10 +25,10 @@ export async function fetchAllTransactionSummary(userId: string): Promise<Summar
   return out
 }
 
-export function aggregateByMonth(rows: SummaryRow[]) {
+export function aggregateByMonth(rows: SummaryRow[], periodOf: (date: string) => string = (d) => d.slice(0, 7)) {
   const flowBy = new Map<string, { income: number; expense: number }>()
   for (const t of rows) {
-    const k = t.date.slice(0, 7)
+    const k = periodOf(t.date)
     const f = flowBy.get(k) ?? { income: 0, expense: 0 }
     if (t.kind === 'credit') f.income += t.amount_cents
     else f.expense += t.amount_cents

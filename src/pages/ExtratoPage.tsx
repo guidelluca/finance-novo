@@ -6,6 +6,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMonthData } from '@/hooks/useMonthData'
+import { usePeriods } from '@/hooks/usePeriods'
+import { addDaysIso } from '@/lib/period'
 import { parseBRLToCents } from '@/lib/budgets'
 import { formatBRLFromCents } from '@/lib/currency'
 import { normalizeTransactionLogicalDescription, transactionDedupCandidates } from '@/lib/dedupKey'
@@ -42,8 +44,14 @@ function dayLabel(iso: string, today: string): string {
 export function ExtratoPage() {
   const { user } = useAuth()
   const [params, setParams] = useSearchParams()
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const [month, setMonth] = useState(() => params.get('month') ?? today.slice(0, 7))
+  const periods = usePeriods()
+  const today = periods.today
+  const [month, setMonth] = useState(() => params.get('month') ?? periods.current)
+  const [touched, setTouched] = useState(() => Boolean(params.get('month')))
+  useEffect(() => {
+    if (!touched) setMonth(periods.current)
+  }, [periods.current, touched])
+  const range = useMemo(() => periods.rangeOf(month), [periods, month])
   const [chip, setChip] = useState<Chip>(() => {
     const k = params.get('kind')
     if (params.get('filtro') === 'dup') return 'dup'
@@ -71,10 +79,11 @@ export function ExtratoPage() {
   const excludedById = useMemo(() => new Map(cons.result.excluded.map((e) => [e.tx.id, e])), [cons.result])
 
   const load = useCallback(async () => {
-    if (!user) return
+    if (!user || !periods.ready) return
     setLoading(true)
-    const from = `${month}-01`
-    const to = `${shiftMonth(month, 1)}-01`
+    // mês financeiro: do salário do fim do mês anterior até a véspera do próximo
+    const from = range.start
+    const to = addDaysIso(range.end, 1)
     const [t, c, r] = await Promise.all([
       supabase.from('transactions').select('*').eq('user_id', user.id).gte('date', from).lt('date', to).order('date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('categories').select('*').eq('user_id', user.id).order('sort_order'),
@@ -85,7 +94,7 @@ export function ExtratoPage() {
     setCategories((c.data ?? []) as Category[])
     setRules((r.data ?? []) as Rule[])
     setLoading(false)
-  }, [user, month])
+  }, [user, periods.ready, range.start, range.end])
 
   const consReload = cons.reload
   const reloadAll = useCallback(() => {
@@ -284,14 +293,17 @@ export function ExtratoPage() {
     setNotice(`Adicionado: ${identifyMerchant(desc).name}.`)
     setAdding(false)
     setNewForm({ date: today, description: '', amount: '', kind: 'debit', categoryId: '', account: '' })
-    if (!newForm.date.startsWith(month)) setMonth(newForm.date.slice(0, 7))
+    if (periods.periodOf(newForm.date) !== month) {
+      setTouched(true)
+      setMonth(periods.periodOf(newForm.date))
+    }
     else reloadAll()
   }
 
   const dupCount = cons.result.excluded.filter((e) => e.reason === 'duplicada').length
   const pending = uncategorized[0]
   const pendingSuggestion = pending ? suggestFor(pending) : null
-  const monthLabel = format(parseISO(`${month}-01`), "LLLL 'de' yyyy", { locale: ptBR })
+  const monthLabel = `${format(parseISO(`${month}-01`), "LLLL 'de' yyyy", { locale: ptBR })} · ${range.start.slice(8)}/${range.start.slice(5, 7)}–${range.end.slice(8)}/${range.end.slice(5, 7)}`
 
   const chips: { id: Chip; label: string }[] = [
     { id: 'all', label: 'Tudo' },
@@ -344,11 +356,17 @@ export function ExtratoPage() {
           </div>
         </div>
         <div className="flex items-center justify-between rounded-2xl border border-border bg-surface px-1">
-          <button type="button" aria-label="Mês anterior" onClick={() => setMonth((m) => shiftMonth(m, -1))} className="flex size-10 items-center justify-center text-muted">
+          <button type="button" aria-label="Mês anterior" onClick={() => {
+            setTouched(true)
+            setMonth((m) => shiftMonth(m, -1))
+          }} className="flex size-10 items-center justify-center text-muted">
             <ChevronLeft className="size-5" />
           </button>
           <span className="text-sm font-semibold capitalize">{monthLabel}</span>
-          <button type="button" aria-label="Próximo mês" onClick={() => setMonth((m) => shiftMonth(m, 1))} className="flex size-10 items-center justify-center text-muted">
+          <button type="button" aria-label="Próximo mês" onClick={() => {
+            setTouched(true)
+            setMonth((m) => shiftMonth(m, 1))
+          }} className="flex size-10 items-center justify-center text-muted">
             <ChevronRight className="size-5" />
           </button>
         </div>

@@ -110,9 +110,6 @@ function dayDiff(a: string, b: string): number {
   return Math.abs((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000)
 }
 
-function monthOf(date: string): string {
-  return date.slice(0, 7)
-}
 
 export function shiftMonth(month: string, k: number): string {
   const [y, m] = month.split('-').map(Number) as [number, number]
@@ -196,9 +193,12 @@ export function consolidateMonth(
   dismissed: Set<string> = new Set(),
   /** nome do titular (do cabeçalho do extrato): Pix para esse nome = entre suas contas */
   ownerName: string | null = null,
+  /** mês financeiro (começa no salário); sem isso, mês do calendário */
+  periodOf: (date: string) => string = (d) => d.slice(0, 7),
 ): ConsolidatedMonth {
+  const monthOf = periodOf
   const items = monthTxs.filter((t) => monthOf(t.date) === month).map(enrich)
-  const hist = history.filter((t) => t.date < `${month}-01`).map(enrich)
+  const hist = history.filter((t) => monthOf(t.date) < month).map(enrich)
   const issues: Issue[] = []
   const excluded = new Map<string, Excluded>()
   const exclude = (tx: ConsItem, reason: ExcludedReason, note: string, relatedId?: string) => {
@@ -469,7 +469,7 @@ export function consolidateMonth(
 
   // 8) Recorrente que sumiu (todo mês nos últimos 3, mas não neste)
   const last3 = [1, 2, 3].map((k) => shiftMonth(month, -k))
-  const monthOver = month < today.slice(0, 7)
+  const monthOver = month < monthOf(today)
   const reportedMissing: ConsItem[] = []
   for (const [mk, past] of byMerchant) {
     if (!mk || expenses.some((t) => similarMerchant(t, past[0]!))) continue

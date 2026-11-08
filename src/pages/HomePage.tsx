@@ -1,11 +1,12 @@
-import { format, getDaysInMonth, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, ClipboardCheck, Plus, Sparkles, Upload } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCoverage } from '@/hooks/useCoverage'
 import { useMonthData } from '@/hooks/useMonthData'
+import { usePeriods } from '@/hooks/usePeriods'
 import { effectiveTotal, readBudgets } from '@/lib/budgets'
 import { formatBRLFromCents } from '@/lib/currency'
 import { consolidateMonth, shiftMonth } from '@/lib/monthConsolidation'
@@ -44,44 +45,55 @@ function relDay(iso: string, today: string): string {
 
 export function HomePage() {
   const { user } = useAuth()
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const [month, setMonth] = useState(() => today.slice(0, 7))
+  const periods = usePeriods()
+  const today = periods.today
+  const [month, setMonth] = useState(() => periods.current)
+  const [touched, setTouched] = useState(false)
+  useEffect(() => {
+    if (!touched) setMonth(periods.current)
+  }, [periods.current, touched])
   // fechamento do mês anterior: avisa até todos os extratos estarem importados
-  const closingMonth = shiftMonth(today.slice(0, 7), -1)
+  const closingMonth = shiftMonth(periods.current, -1)
   const closing = useCoverage(closingMonth)
   const closingMissing = closing.coverage.filter((c) => c.status === 'falta' || c.status === 'parcial')
-  const { loading, error, result, monthTxs, history } = useMonthData(month)
+  const { loading, error, result, monthTxs, history, range } = useMonthData(month)
   const budgets = readBudgets(user)
 
-  const isCurrent = month === today.slice(0, 7)
-  const daysInMonth = getDaysInMonth(parseISO(`${month}-01`))
-  const refDay = isCurrent ? Number(today.slice(8)) : daysInMonth
+  const isCurrent = month === periods.current
+  // dias do mês financeiro (ex.: 29/10 a 26/11); refDay = posição de hoje nele (1 = 1.º dia)
+  const dayIdx = (iso: string) => Math.round((Date.parse(`${iso}T12:00:00Z`) - Date.parse(`${range.start}T12:00:00Z`)) / 86_400_000)
+  const daysInMonth = dayIdx(range.end) + 1
+  const refDay = isCurrent ? Math.min(daysInMonth, dayIdx(today) + 1) : daysInMonth
+  const todayDay = Number(today.slice(8))
 
   const { daily, maxDay, spentSoFar } = useMemo(() => {
     const d = Array.from({ length: daysInMonth }, () => 0)
     for (const t of result.included) {
-      const i = Number(t.date.slice(8)) - 1
-      if (t.kind === 'debit') d[i] = (d[i] ?? 0) + t.amountCents
+      const i = dayIdx(t.date)
+      if (t.kind === 'debit' && i >= 0 && i < d.length) d[i] = (d[i] ?? 0) + t.amountCents
     }
     const so = d.slice(0, refDay).reduce((s, v) => s + v, 0)
     return { daily: d, maxDay: Math.max(1, ...d), spentSoFar: so }
-  }, [result, daysInMonth, refDay])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, daysInMonth, refDay, range.start])
 
   // gasto até o mesmo dia no mês anterior (consolidado, sem repetições)
   const prevSoFar = useMemo(() => {
     const prev = shiftMonth(month, -1)
-    const prevTx = history.filter((t) => t.date.startsWith(prev))
+    const prevStart = periods.rangeOf(prev).start
+    const prevTx = history.filter((t) => periods.periodOf(t.date) === prev)
     if (prevTx.length === 0) return null
-    const r = consolidateMonth(prev, prevTx, history.filter((t) => t.date < `${prev}-01`), today)
+    const r = consolidateMonth(prev, prevTx, history.filter((t) => periods.periodOf(t.date) < prev), today, new Set(), null, periods.periodOf)
+    const offset = (iso: string) => Math.round((Date.parse(`${iso}T12:00:00Z`) - Date.parse(`${prevStart}T12:00:00Z`)) / 86_400_000)
     return r.included
-      .filter((t) => t.kind === 'debit' && Number(t.date.slice(8)) <= refDay)
+      .filter((t) => t.kind === 'debit' && offset(t.date) < refDay)
       .reduce((s, t) => s + t.amountCents, 0)
-  }, [history, month, refDay, today])
+  }, [history, month, refDay, today, periods])
   const delta = prevSoFar ? spentSoFar / prevSoFar - 1 : null
 
   const recurring = useMemo(() => detectRecurring(month, monthTxs, history), [month, monthTxs, history])
   const upcoming = recurring
-    .filter((r) => !r.paidThisMonth && (!isCurrent || r.day >= refDay))
+    .filter((r) => !r.paidThisMonth && (!isCurrent || r.day >= todayDay))
     .slice(0, 3)
   const upcomingTotal = upcoming.reduce((s, r) => s + r.amountCents, 0)
 
@@ -114,14 +126,22 @@ export function HomePage() {
   return (
     <div className="space-y-3.5 pb-24">
       <div className="flex items-center justify-center gap-1">
-        <button type="button" aria-label="Mês anterior" onClick={() => setMonth((m) => shiftMonth(m, -1))} className="flex size-11 items-center justify-center rounded-xl hover:bg-surface">
+        <button type="button" aria-label="Mês anterior" onClick={() => {
+            setTouched(true)
+            setMonth((m) => shiftMonth(m, -1))
+          }} className="flex size-11 items-center justify-center rounded-xl hover:bg-surface">
           <ChevronLeft className="size-5" />
         </button>
         <div className="min-w-[120px] text-center">
-          <p className="text-xs font-medium text-muted">{month.slice(0, 4)}</p>
           <p className="font-display text-xl font-semibold capitalize">{monthName}</p>
+          <p className="text-xs font-medium text-muted">
+            {range.start.slice(8)}/{range.start.slice(5, 7)} – {range.end.slice(8)}/{range.end.slice(5, 7)}
+          </p>
         </div>
-        <button type="button" aria-label="Próximo mês" onClick={() => setMonth((m) => shiftMonth(m, 1))} className="flex size-11 items-center justify-center rounded-xl hover:bg-surface">
+        <button type="button" aria-label="Próximo mês" onClick={() => {
+            setTouched(true)
+            setMonth((m) => shiftMonth(m, 1))
+          }} className="flex size-11 items-center justify-center rounded-xl hover:bg-surface">
           <ChevronRight className="size-5" />
         </button>
       </div>
@@ -149,7 +169,7 @@ export function HomePage() {
                 'shrink-0 rounded-full px-2.5 py-1.5 text-xs font-semibold text-ink',
                 delta <= 0 ? 'bg-lime' : 'bg-[#f28c6b]',
               )}
-              title={`Gastos até o dia ${refDay} comparados com o mesmo período do mês anterior`}
+              title={`Gastos nos primeiros ${refDay} dias do mês financeiro, comparados com o mesmo trecho do mês anterior`}
             >
               {delta <= 0 ? '−' : '+'}
               {Math.abs(Math.round(delta * 100))}% gastos
@@ -277,7 +297,7 @@ export function HomePage() {
           <div className="flex gap-2.5">
             {upcoming.map((r) => (
               <div key={r.key} className="min-w-0 flex-1 space-y-1.5 rounded-[18px] border border-border bg-surface p-3">
-                <p className={cn('text-xs font-semibold', isCurrent && r.day - refDay <= 3 ? 'text-danger' : 'text-muted')}>Dia {r.day}</p>
+                <p className={cn('text-xs font-semibold', isCurrent && r.day - todayDay <= 3 ? 'text-danger' : 'text-muted')}>Dia {r.day}</p>
                 <p className="truncate text-sm font-medium">{r.name}</p>
                 <p className="text-[13px] text-muted">{formatBRLFromCents(r.amountCents)}</p>
               </div>

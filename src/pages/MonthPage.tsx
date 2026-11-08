@@ -1,4 +1,4 @@
-import { endOfMonth, format, parseISO, startOfMonth, subMonths } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Download, EyeOff, Info } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePeriods } from '@/hooks/usePeriods'
 import { formatBRLFromCents } from '@/lib/currency'
 import { learnRules } from '@/lib/learnRules'
 import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
@@ -90,7 +91,13 @@ async function fetchRange(userId: string, from: string, to: string): Promise<Row
 
 export function MonthPage() {
   const { user } = useAuth()
-  const [month, setMonth] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM'))
+  const periods = usePeriods()
+  const [month, setMonth] = useState(() => periods.current)
+  const [touched, setTouched] = useState(false)
+  useEffect(() => {
+    if (!touched) setMonth(periods.current)
+  }, [periods.current, touched])
+  const range = useMemo(() => periods.rangeOf(month), [periods, month])
   const [rows, setRows] = useState<Row[]>([])
   const [parserByBatch, setParserByBatch] = useState<Map<string, string>>(new Map())
   const [categories, setCategories] = useState<Category[]>([])
@@ -106,13 +113,12 @@ export function MonthPage() {
   }, [user])
 
   const load = useCallback(async () => {
-    if (!user) return
+    if (!user || !periods.ready) return
     setLoading(true)
     setError(null)
     try {
-      const start = parseISO(`${month}-01`)
-      const from = format(startOfMonth(subMonths(start, 6)), 'yyyy-MM-dd')
-      const to = format(endOfMonth(start), 'yyyy-MM-dd')
+      const from = periods.rangeOf(shiftMonth(month, -6)).start
+      const to = range.end
       const [txs, batches, cats] = await Promise.all([
         fetchRange(user.id, from, to),
         supabase.from('import_batches').select('id, parser_id').eq('user_id', user.id),
@@ -126,7 +132,8 @@ export function MonthPage() {
     } finally {
       setLoading(false)
     }
-  }, [user, month])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, month, periods.ready, range.start, range.end])
 
   useEffect(() => {
     void load()
@@ -152,14 +159,15 @@ export function MonthPage() {
     const all = rows.map(toCons)
     return consolidateMonth(
       month,
-      all.filter((t) => t.date.startsWith(month)),
-      all.filter((t) => t.date < `${month}-01`),
+      all.filter((t) => periods.periodOf(t.date) === month),
+      all.filter((t) => periods.periodOf(t.date) < month),
       format(new Date(), 'yyyy-MM-dd'),
       dismissed,
       (user?.user_metadata?.owner_name as string | undefined) ?? null,
+      periods.periodOf,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, parserByBatch, catName, month, dismissed, user])
+  }, [rows, parserByBatch, catName, month, dismissed, user, periods])
 
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows])
 
@@ -242,14 +250,22 @@ export function MonthPage() {
   return (
     <div className="space-y-5 pb-24">
       <header className="flex items-center justify-between gap-2">
-        <Button variant="ghost" size="icon" aria-label="Mês anterior" onClick={() => setMonth((m) => shiftMonth(m, -1))}>
+        <Button variant="ghost" size="icon" aria-label="Mês anterior" onClick={() => {
+            setTouched(true)
+            setMonth((m) => shiftMonth(m, -1))
+          }}>
           <ChevronLeft className="size-5" />
         </Button>
         <div className="text-center">
-          <p className="text-xs text-muted">Extrato consolidado</p>
+          <p className="text-xs text-muted">
+            Extrato consolidado · {range.start.slice(8)}/{range.start.slice(5, 7)}–{range.end.slice(8)}/{range.end.slice(5, 7)}
+          </p>
           <h1 className="text-xl font-semibold capitalize tracking-tight">{monthLabel}</h1>
         </div>
-        <Button variant="ghost" size="icon" aria-label="Próximo mês" onClick={() => setMonth((m) => shiftMonth(m, 1))}>
+        <Button variant="ghost" size="icon" aria-label="Próximo mês" onClick={() => {
+            setTouched(true)
+            setMonth((m) => shiftMonth(m, 1))
+          }}>
           <ChevronRight className="size-5" />
         </Button>
       </header>

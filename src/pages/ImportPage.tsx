@@ -40,6 +40,8 @@ import { parseMoneyToCents } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { Link, useSearchParams } from 'react-router-dom'
 import { matchAccount, readAccounts } from '@/lib/accounts'
+import { refreshSalaryAnchors } from '@/hooks/usePeriods'
+import { SALARY_RE } from '@/lib/period'
 
 const PARSER_OPTIONS: { id: ParserId; label: string }[] = [
   { id: 'screenshot_ai_v1', label: 'Print / Foto — extraído por IA' },
@@ -852,6 +854,8 @@ export function ImportPage() {
       )
       setDetectedBank(null)
 
+      // salário novo pode mudar o dia em que o mês financeiro começa
+      if (toSave.some((d) => d.kind === 'credit' && SALARY_RE.test(d.descriptionRaw))) void refreshSalaryAnchors(user.id)
       setStep('pick')
       setPickedAccountId(null)
       setFile(null)
