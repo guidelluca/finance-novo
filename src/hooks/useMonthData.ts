@@ -131,5 +131,5 @@ export function useMonthData(month: string) {
     [month, monthTxs, history, dismissed, user, periods],
   )
 
-  return { loading, error, categories, result, monthTxs, history, reload: load, range, periods }
+  return { loading, error, categories, result, monthTxs, history, reload: load, range, periods, dismissed }
 }

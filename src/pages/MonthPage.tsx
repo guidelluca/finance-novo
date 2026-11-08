@@ -51,6 +51,7 @@ const REASON_LABEL: Record<string, string> = {
   investimento: 'Aplicações e resgates',
   estorno: 'Estornos (cobrança e devolução)',
   linha_invalida: 'Linhas que não são lançamentos',
+  valor_improvavel: 'Valores improváveis (aguardando você)',
 }
 
 function loadDismissed(userId: string): Set<string> {
@@ -450,6 +451,19 @@ export function MonthPage() {
                             Apagar uma
                           </Button>
                         ) : null}
+                        {issue.type === 'valor_improvavel' && txs[0] ? (
+                          <>
+                            <Button size="sm" variant="secondary" asChild>
+                              <Link to={`/transactions?month=${month}&q=${encodeURIComponent(txs[0].merchant)}`}>Corrigir o valor</Link>
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => void deleteTx(txs[0]!.id, txs[0]!.merchant)}>
+                              Apagar
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => dismiss(issue)}>
+                              O valor está certo — contar
+                            </Button>
+                          </>
+                        ) : null}
                         {issue.type === 'linha_invalida' ? (
                           <>
                             <Button size="sm" variant="secondary" onClick={() => void deleteMany(issue.txIds)}>
@@ -475,7 +489,7 @@ export function MonthPage() {
                             <Link to="/import">Importar</Link>
                           </Button>
                         ) : null}
-                        {issue.type !== 'sem_categoria' && issue.type !== 'duplicada' && issue.type !== 'transferencia_interna' && issue.type !== 'estorno' && issue.type !== 'linha_invalida' ? (
+                        {issue.type !== 'sem_categoria' && issue.type !== 'duplicada' && issue.type !== 'transferencia_interna' && issue.type !== 'estorno' && issue.type !== 'linha_invalida' && issue.type !== 'valor_improvavel' ? (
                           <Button size="sm" variant="ghost" onClick={() => dismiss(issue)}>
                             <EyeOff className="size-4" /> Está certo
                           </Button>

@@ -35,7 +35,7 @@ export type ConsItem = ConsTx & {
   ruleKey: string | null
 }
 
-export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento' | 'estorno' | 'linha_invalida'
+export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento' | 'estorno' | 'linha_invalida' | 'valor_improvavel'
 
 export type Excluded = { tx: ConsItem; reason: ExcludedReason; relatedId?: string; note: string }
 
@@ -55,6 +55,7 @@ export type IssueType =
   | 'estorno'
   | 'categoria_suspeita'
   | 'linha_invalida'
+  | 'valor_improvavel'
 
 export type Severity = 'alta' | 'media' | 'baixa'
 
@@ -99,6 +100,17 @@ const CARD_PAYMENT =
   /fatura paga|pagamento (de |da )?fatura|pgto\.? ?fatura|pag(to|amento)? (de )?cart[aã]o|fatura (do |de )?cart[aã]o|itaucard|nu ?pagamentos|pagamento.*\b(nubank|picpay card|cart[aã]o)\b|d[eé]bito autom[aá]tico.*fatura/i
 const INVESTMENT =
   /\b(aplica[cç][aã]o|resgate|rdb|cdb|lci|lca|tesouro direto|poupan[cç]a|caixinha|cofrinho|porquinho|investimento|guardado|guardar dinheiro)\b/i
+/** Teto plausível de um único lançamento por tipo de gasto (acima disso, provavelmente erro de leitura). */
+const PLAUSIBLE_MAX: { re: RegExp; max: number; what: string }[] = [
+  { re: /autopass|[oô]nibus|metr[oô]\b|via[cç][aã]o|bilhete [uú]nico|sptrans|cptm|emtu|transporte p[uú]blico/i, max: 15_000, what: 'uma passagem ou recarga de transporte' },
+  { re: /\buber\b|^99\b|99 \(corrida\)|\bcabify\b|indrive|corrida/i, max: 30_000, what: 'uma corrida de app' },
+  { re: /ifood|99food|rappi|z[eé] delivery|delivery/i, max: 40_000, what: 'um pedido de delivery' },
+  { re: /netflix|spotify|disney|hbo|prime video|youtube|deezer|globoplay|apple\.com|icloud|streaming/i, max: 15_000, what: 'uma assinatura de streaming' },
+  { re: /padaria|lanchonete|\bcaf[eé]\b|sorvet|a[cç]a[ií]/i, max: 25_000, what: 'uma compra em padaria ou lanchonete' },
+  { re: /estacionamento|ped[aá]gio|sem parar|conectcar|veloe/i, max: 20_000, what: 'estacionamento ou pedágio' },
+  { re: /^iof\b|\btarifa\b|anuidade/i, max: 30_000, what: 'uma tarifa ou IOF' },
+]
+
 const SELF_TRANSFER = /conta pr[oó]pria|mesma titularidade/i
 const fold = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
 const TRANSFER_HINT = /\b(pix|transf|transfer[eê]ncia|ted|doc)\b/i
@@ -383,6 +395,26 @@ export function consolidateMonth(
       title: `${label}: ${d.merchant} · ${brl(d.amountCents)}`,
       detail: 'Cobrança e devolução do mesmo valor. Tirei as duas de entradas e saídas. Se não for estorno, toque em "Não é estorno".',
       txIds: [d.id, c.id],
+    })
+  }
+
+  // 4d) Análise crítica: valor que não faz sentido para o tipo de gasto (ex.: R$ 2.731 no Autopass)
+  //     fica fora da soma até você confirmar — geralmente é leitura errada do extrato
+  for (const t of items) {
+    if (excluded.has(t.id) || t.kind !== 'debit') continue
+    const hay = `${t.merchant} ${t.merchantKind ?? ''} ${t.description}`
+    const rule = PLAUSIBLE_MAX.find((r) => r.re.test(hay))
+    if (!rule || t.amountCents <= rule.max) continue
+    const id = issueId('valor_improvavel', [t.id])
+    if (dismissed.has(id)) continue
+    exclude(t, 'valor_improvavel', `Valor alto demais para ${rule.what}. Fora da soma até você confirmar.`)
+    issues.push({
+      id,
+      type: 'valor_improvavel',
+      severity: 'alta',
+      title: `${brl(t.amountCents)} em ${t.merchant}?`,
+      detail: `É muito para ${rule.what} (costuma ser até ${brl(rule.max)}). Pode ter sido lido errado do extrato: confira o valor no app do banco e corrija, ou importe o arquivo de novo. Deixei fora da soma até você confirmar.`,
+      txIds: [t.id],
     })
   }
 

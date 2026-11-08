@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useTheme } from '@/contexts/ThemeContext'
 
 export type ChartTheme = {
   isDark: boolean
@@ -13,18 +13,8 @@ export type ChartTheme = {
 }
 
 export function useChartTheme(): ChartTheme {
-  const [isDark, setIsDark] = useState(() =>
-    typeof window !== 'undefined'
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches
-      : true,
-  )
-
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => setIsDark(mq.matches)
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
-  }, [])
+  // segue o tema escolhido no app (claro/escuro), não só o do sistema
+  const isDark = useTheme().resolved === 'dark'
 
   if (isDark) {
     return {

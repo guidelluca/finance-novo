@@ -16,6 +16,7 @@ import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
 import { issueId, shiftMonth, type ExcludedReason } from '@/lib/monthConsolidation'
 import { suggestCategoryId } from '@/lib/rulesEngine'
 import { supabase } from '@/lib/supabase'
+import { paymentMethodOf, type CardInfo } from '@/lib/paymentMethod'
 import { cn } from '@/lib/utils'
 import { tileColors } from '@/pages/HomePage'
 import type { Category, Rule, Transaction } from '@/types/database'
@@ -30,6 +31,7 @@ const EXCLUDED_LABEL: Record<ExcludedReason, string> = {
   investimento: 'aplicação — não conta',
   estorno: 'estornado — não conta',
   linha_invalida: 'não é lançamento (saldo/cabeçalho) — apague',
+  valor_improvavel: 'valor improvável — confira',
 }
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
@@ -58,9 +60,11 @@ export function ExtratoPage() {
     if (params.get('filtro') === 'dup') return 'dup'
     return k === 'credit' ? 'in' : k === 'debit' ? 'out' : params.get('category') === 'none' ? 'none' : 'all'
   })
+  const [methodKey, setMethodKey] = useState<string>('')
+  const [cards, setCards] = useState<Map<string, CardInfo>>(new Map())
   const [q, setQ] = useState(() => {
     const c = params.get('category')
-    return c && c !== 'none' ? c : ''
+    return params.get('q') ?? (c && c !== 'none' ? c : '')
   })
   const [txs, setTxs] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -85,11 +89,13 @@ export function ExtratoPage() {
     // mês financeiro: do salário do fim do mês anterior até a véspera do próximo
     const from = range.start
     const to = addDaysIso(range.end, 1)
-    const [t, c, r] = await Promise.all([
+    const [t, c, r, cc] = await Promise.all([
       supabase.from('transactions').select('*').eq('user_id', user.id).gte('date', from).lt('date', to).order('date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('categories').select('*').eq('user_id', user.id).order('sort_order'),
       supabase.from('rules').select('*').eq('user_id', user.id).eq('enabled', true),
+      supabase.from('credit_cards').select('id, name, last4').eq('user_id', user.id),
     ])
+    setCards(new Map(((cc.data ?? []) as CardInfo[]).map((c) => [c.id, c])))
     if (t.error) setError(t.error.message)
     setTxs((t.data ?? []) as Transaction[])
     setCategories((c.data ?? []) as Category[])
@@ -116,6 +122,19 @@ export function ExtratoPage() {
   }, [])
 
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
+  const methodOf = useCallback(
+    (t: Transaction) => paymentMethodOf({ description: t.description_raw, account: t.account, cardId: t.credit_card_id }, cards),
+    [cards],
+  )
+  const methodOptions = useMemo(() => {
+    const m = new Map<string, { label: string; n: number }>()
+    for (const t of txs) {
+      const pm = methodOf(t)
+      const cur = m.get(pm.key)
+      m.set(pm.key, { label: pm.label.replace(/^Tarifas e juros · .*/, 'Tarifas e juros'), n: (cur?.n ?? 0) + 1 })
+    }
+    return [...m.entries()].sort((a, b) => b[1].n - a[1].n)
+  }, [txs, methodOf])
   const merchantOf = useCallback((t: Transaction) => identifyMerchant(t.description_raw).name, [])
 
   // totais sem repetição: pagamento de fatura, transferências entre contas e duplicadas não contam
@@ -136,12 +155,13 @@ export function ExtratoPage() {
       if (chip === 'in' && t.kind !== 'credit') return false
       if (chip === 'none' && (t.category_id || t.kind !== 'debit' || !counts(t))) return false
       if (chip === 'dup' && excludedById.get(t.id)?.reason !== 'duplicada') return false
+      if (methodKey && methodOf(t).key !== methodKey) return false
       if (!nq) return true
-      const hay = norm(`${merchantOf(t)} ${t.description_raw} ${catName.get(t.category_id ?? '') ?? ''} ${t.account ?? ''} ${(t.amount_cents / 100).toFixed(2).replace('.', ',')}`)
+      const hay = norm(`${merchantOf(t)} ${t.description_raw} ${catName.get(t.category_id ?? '') ?? ''} ${t.account ?? ''} ${methodOf(t).label} ${(t.amount_cents / 100).toFixed(2).replace('.', ',')}`)
       return hay.includes(nq)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txs, chip, q, catName, merchantOf, excludedById])
+  }, [txs, chip, q, catName, merchantOf, excludedById, methodKey, methodOf])
 
   const days = useMemo(() => {
     const m = new Map<string, Transaction[]>()
@@ -222,12 +242,15 @@ export function ExtratoPage() {
   }
 
   /** "Não é repetida": passa a contar (mesma marcação do Mês consolidado). */
-  const confirmNotDuplicate = (t: Transaction, keepId: string) => {
+  const confirmNotDuplicate = (t: Transaction, keepId: string) => confirmCounts(t, issueId('duplicada', [keepId, t.id]))
+
+  /** marca o alerta como resolvido pelo usuário: o lançamento passa a contar */
+  const confirmCounts = (t: Transaction, alertId: string) => {
     if (!user) return
     const key = `finance:dismissed:${user.id}`
     try {
       const cur = new Set(JSON.parse(localStorage.getItem(key) ?? '[]') as string[])
-      cur.add(issueId('duplicada', [keepId, t.id]))
+      cur.add(alertId)
       localStorage.setItem(key, JSON.stringify([...cur]))
     } catch {
       setError('Não consegui guardar a confirmação neste navegador.')
@@ -390,6 +413,24 @@ export function ExtratoPage() {
               {c.label}
             </button>
           ))}
+          {methodOptions.length > 1 ? (
+            <select
+              aria-label="Forma de pagamento"
+              value={methodKey}
+              onChange={(e) => setMethodKey(e.target.value)}
+              className={cn(
+                'min-h-9 rounded-full px-3 text-[13px]',
+                methodKey ? 'bg-primary font-semibold text-primary-fg' : 'border border-border bg-surface font-medium',
+              )}
+            >
+              <option value="">Qualquer forma de pagamento</option>
+              {methodOptions.map(([k, o]) => (
+                <option key={k} value={k}>
+                  {o.label} · {o.n}
+                </option>
+              ))}
+            </select>
+          ) : null}
         </div>
       </header>
 
@@ -502,7 +543,12 @@ export function ExtratoPage() {
                         <span className="block truncate text-sm font-medium">{merchantOf(t)}</span>
                         <span className={cn('block truncate text-xs', cat || ex ? 'text-muted' : 'text-warning')}>
                           {ex ? EXCLUDED_LABEL[ex.reason] : (cat ?? 'Sem categoria')}
-                          {t.account ? ` · ${t.account}` : ''}
+                          {(() => {
+                            const pm = methodOf(t)
+                            return pm.group === 'credito' || pm.label.includes('Cartão')
+                              ? ` · ${pm.label}`
+                              : ` · ${pm.label}${t.account ? ` · ${t.account}` : ''}`
+                          })()}
                         </span>
                       </span>
                       <span
@@ -520,6 +566,14 @@ export function ExtratoPage() {
                       <div className="space-y-3 px-2.5 pb-3">
                         <p className="truncate font-mono text-[11px] text-muted">{t.description_raw}</p>
                         {ex ? <p className="text-xs text-muted">{ex.note}</p> : null}
+                        {ex?.reason === 'valor_improvavel' ? (
+                          <div className="flex flex-wrap gap-2 rounded-xl bg-background p-2.5">
+                            <p className="w-full text-xs text-muted">Corrija o valor acima e salve, ou confirme que está certo.</p>
+                            <Button size="sm" variant="secondary" onClick={() => confirmCounts(t, issueId('valor_improvavel', [t.id]))}>
+                              O valor está certo — contar
+                            </Button>
+                          </div>
+                        ) : null}
                         {ex?.reason === 'duplicada' && ex.relatedId ? (
                           <div className="flex flex-wrap gap-2 rounded-xl bg-background p-2.5">
                             <Button size="sm" variant="secondary" onClick={() => confirmNotDuplicate(t, ex.relatedId!)}>

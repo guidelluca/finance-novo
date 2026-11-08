@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, ClipboardCheck, Plus, Sparkles, Upload } fro
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { HomeDashboard } from '@/components/finance/HomeDashboard'
 import { useCoverage } from '@/hooks/useCoverage'
 import { useMonthData } from '@/hooks/useMonthData'
 import { usePeriods } from '@/hooks/usePeriods'
@@ -56,7 +57,7 @@ export function HomePage() {
   const closingMonth = shiftMonth(periods.current, -1)
   const closing = useCoverage(closingMonth)
   const closingMissing = closing.coverage.filter((c) => c.status === 'falta' || c.status === 'parcial')
-  const { loading, error, result, monthTxs, history, range } = useMonthData(month)
+  const { loading, error, result, monthTxs, history, range, dismissed } = useMonthData(month)
   const budgets = readBudgets(user)
 
   const isCurrent = month === periods.current
@@ -333,6 +334,21 @@ export function HomePage() {
           </div>
         ))}
       </section>
+
+      {!loading ? (
+        <HomeDashboard
+          month={month}
+          result={result}
+          monthTxs={monthTxs}
+          history={history}
+          periods={periods}
+          range={range}
+          isCurrent={isCurrent}
+          refDay={refDay}
+          dismissed={dismissed}
+          today={today}
+        />
+      ) : null}
     </div>
   )
 }
