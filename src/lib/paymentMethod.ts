@@ -1,42 +1,70 @@
 /**
- * Forma de pagamento de um lançamento: Pix, qual cartão de crédito, débito, boleto, TED…
- * Vem do cartão ligado (fatura), do nome da conta e do texto que o banco escreve.
+ * Forma de pagamento de cada lançamento: Pix, crédito (e qual cartão), débito, boleto, transferência…
+ * Vem da conta (fatura de cartão) e do texto do lançamento no extrato.
  */
+export type MethodGroup =
+  | 'pix'
+  | 'credito'
+  | 'debito'
+  | 'boleto'
+  | 'transferencia'
+  | 'salario'
+  | 'investimento'
+  | 'tarifa'
+  | 'pagamento_fatura'
+  | 'outro'
+
 export type PaymentMethod = {
-  /** chave estável (para cor e filtro) */
+  group: MethodGroup
+  /** chave estável para agrupar (um cartão = uma chave) */
   key: string
+  /** curto, para a lista: "Pix", "Crédito · Cartão Itaú", "Débito" */
   label: string
-  group: 'pix' | 'cartao' | 'debito' | 'boleto' | 'transferencia' | 'tarifa' | 'investimento' | 'salario' | 'outro'
 }
 
-const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+export type CardInfo = { id: string; name: string; last4: string | null }
 
-function cardLabel(account: string | null, cardName: string | null): string {
-  // o nome da conta da fatura ("Cartão Itaú") manda; o cadastro do cartão só quando a conta é genérica
-  const a = (account ?? '').trim()
-  if (/^cart[aã]o\b/i.test(a) && !/^cart[aã]o de cr[eé]dito$/i.test(a)) return a
-  if (cardName) return /cart[aã]o/i.test(cardName) ? cardName : `Cartão ${cardName}`
-  const bank = a.replace(/cart[aã]o|de|cr[eé]dito/gi, '').trim()
-  return bank ? `Cartão ${bank}` : 'Cartão de crédito'
+const CARD_ACCOUNT = /^cart[aã]o\b|cr[eé]dito/i
+
+export const GROUP_LABEL: Record<MethodGroup, string> = {
+  pix: 'Pix',
+  credito: 'Crédito',
+  debito: 'Débito',
+  boleto: 'Boleto',
+  transferencia: 'Transferência',
+  salario: 'Salário',
+  investimento: 'Aplicação / resgate',
+  tarifa: 'Tarifas e juros',
+  pagamento_fatura: 'Pagamento de fatura',
+  outro: 'Outros',
+}
+
+function cardLabel(account: string | null, card: CardInfo | undefined): string {
+  // a conta da fatura ("Cartão Itaú") manda: o mesmo cartão fica junto, ligado ou não ao cadastro
+  const base = account && CARD_ACCOUNT.test(account) ? account : card?.name?.trim() || 'Cartão de crédito'
+  return /^cart[aã]o/i.test(base) ? base : `Cartão ${base}`
 }
 
 export function paymentMethodOf(
-  t: { description: string; account: string | null; cardId?: string | null; kind?: 'debit' | 'credit' },
-  cardNames?: Map<string, string>,
+  t: { description: string; account: string | null; cardId?: string | null },
+  cards?: Map<string, CardInfo>,
 ): PaymentMethod {
-  const d = fold(t.description)
-  const isCard = Boolean(t.cardId) || /^cart[aã]o\b|cr[eé]dito/i.test(t.account ?? '')
-  if (isCard && !/fatura paga|pagamento (de |da )?fatura/.test(d)) {
-    const label = cardLabel(t.account, t.cardId ? (cardNames?.get(t.cardId) ?? null) : null)
-    return { key: `cartao:${fold(label)}`, label, group: 'cartao' }
+  const d = t.description
+  // compra no cartão de crédito: veio de fatura (ligada a um cartão ou conta "Cartão …")
+  if (t.cardId || CARD_ACCOUNT.test(t.account ?? '')) {
+    const card = t.cardId ? cards?.get(t.cardId) : undefined
+    if (/^iof\b/i.test(d)) return { group: 'tarifa', key: 'tarifa', label: `Tarifas e juros · ${cardLabel(t.account, card)}` }
+    const label = cardLabel(t.account, card)
+    return { group: 'credito', key: `credito:${label.toLowerCase()}`, label: `Crédito · ${label}` }
   }
-  if (/fatura paga|pagamento (de |da )?fatura|pagto fatura/.test(d)) return { key: 'fatura', label: 'Pagamento de fatura', group: 'outro' }
-  if (/\bpix\b|pelo pix/.test(d)) return { key: 'pix', label: 'Pix', group: 'pix' }
-  if (/remunera|salario|folha de pag/.test(d)) return { key: 'salario', label: 'Salário', group: 'salario' }
-  if (/boleto|\bpag(to)?\.? bol|cobranca bancaria/.test(d)) return { key: 'boleto', label: 'Boleto', group: 'boleto' }
-  if (/^ted\b|^doc\b|^tef\b|transferencia (enviada|recebida)?(?! pelo pix)/.test(d)) return { key: 'ted', label: 'TED / transferência', group: 'transferencia' }
-  if (/juros|\biof\b|tarifa|anuidade|encargo|multa/.test(d)) return { key: 'tarifa', label: 'Tarifas e juros', group: 'tarifa' }
-  if (/rend(imento)?s?\b|aplic|resgate|\brdb\b|\bcdb\b|investimento|poupanca/.test(d)) return { key: 'invest', label: 'Investimentos', group: 'investimento' }
-  if (/debito|nupay|compra no deb|cartao deb|elo deb|maestro|visa electron|^pay\b|^compra\b/.test(d)) return { key: 'debito', label: 'Débito', group: 'debito' }
-  return { key: 'outro', label: 'Outros', group: 'outro' }
+  const make = (group: MethodGroup): PaymentMethod => ({ group, key: group, label: GROUP_LABEL[group] })
+  if (/fatura paga|pagamento (de |da )?fatura|pagto\.? fatura/i.test(d)) return make('pagamento_fatura')
+  if (/remunera[cç][aã]o|sal[aá]rio|folha de pag/i.test(d)) return make('salario')
+  if (/\bpix\b/i.test(d)) return make('pix')
+  if (/boleto|pag(to)?\.? cobran[cç]a|pagamento de t[ií]tulo|\bdda\b/i.test(d)) return make('boleto')
+  if (/d[eé]bito|nupay|compra (no )?cart[aã]o|^pay\b|^compra\b/i.test(d)) return make('debito')
+  if (/^(ted|doc|tef)\b|transfer[eê]ncia/i.test(d)) return make('transferencia')
+  if (/\brdb\b|\bcdb\b|aplica[cç][aã]o|resgate|rend(imento)?s?\.? pago|invest/i.test(d)) return make('investimento')
+  if (/^iof\b|juros|tarifa|anuidade|encargo/i.test(d)) return make('tarifa')
+  return make('outro')
 }
