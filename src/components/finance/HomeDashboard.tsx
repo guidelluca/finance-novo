@@ -206,7 +206,8 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
     color: ct.tooltipColor,
     fontSize: 12,
   }
-  const brlTick = (v: number) => (v >= 1000 ? `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil` : `${Math.round(v)}`)
+  // sem espaço: o gráfico quebrava "4,5 mil" em duas linhas
+  const brlTick = (v: number) => (v >= 1000 ? `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}k` : `${Math.round(v)}`)
   const brlTip = (v: unknown) => (typeof v === 'number' ? money(Math.round(v * 100)) : '—')
 
   return (
@@ -242,7 +243,7 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
             <LineChart data={cumulative} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={ct.grid} vertical={false} />
               <XAxis dataKey="dia" tick={{ fill: ct.axis, fontSize: 11 }} tickLine={false} axisLine={false} interval={Math.max(0, Math.floor(cumulative.length / 5) - 1)} />
-              <YAxis tick={{ fill: ct.axis, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={brlTick} width={62} />
+              <YAxis tick={{ fill: ct.axis, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={brlTick} width={40} />
               <Tooltip contentStyle={tooltipStyle} formatter={brlTip} labelFormatter={(l) => `Dia ${l}`} />
               <Legend iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
               {prev.hasData ? (

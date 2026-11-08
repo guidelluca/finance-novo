@@ -294,7 +294,7 @@ export function MonthPage() {
             <Card>
               <CardContent className="p-3">
                 <p className="text-xs text-muted">Entrou</p>
-                <p className="truncate text-[15px] font-semibold tabular-nums text-positive">
+                <p className="truncate text-[13px] font-semibold tracking-tight tabular-nums sm:text-[15px] text-positive">
                   {formatBRLFromCents(totals.incomeCents)}
                 </p>
               </CardContent>
@@ -302,7 +302,7 @@ export function MonthPage() {
             <Card>
               <CardContent className="p-3">
                 <p className="text-xs text-muted">Saiu</p>
-                <p className="truncate text-[15px] font-semibold tabular-nums">{formatBRLFromCents(totals.expenseCents)}</p>
+                <p className="truncate text-[13px] font-semibold tracking-tight tabular-nums sm:text-[15px]">{formatBRLFromCents(totals.expenseCents)}</p>
               </CardContent>
             </Card>
             <Card>
@@ -310,7 +310,7 @@ export function MonthPage() {
                 <p className="text-xs text-muted">Sobrou</p>
                 <p
                   className={cn(
-                    'truncate text-[15px] font-semibold tabular-nums',
+                    'truncate text-[13px] font-semibold tracking-tight tabular-nums sm:text-[15px]',
                     totals.netCents < 0 ? 'text-danger' : 'text-accent',
                   )}
                 >
