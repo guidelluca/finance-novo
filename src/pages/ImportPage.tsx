@@ -1,7 +1,7 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, ImagePlus, Sparkles, Trash2, X } from 'lucide-react'
+import { Camera, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -301,7 +301,7 @@ export function ImportPage() {
   const { user } = useAuth()
   const [file, setFile] = useState<File | null>(null)
   const selectedFile = file
-  const [parserFallback, setParserFallback] = useState<ParserId>('nubank_extrato_v1')
+  const [parserFallback, setParserFallback] = useState<ParserId | 'auto'>('auto')
   const [lastParserId, setLastParserId] = useState<ParserId>('nubank_extrato_v1')
   const [drafts, setDrafts] = useState<TransactionDraft[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
@@ -549,7 +549,7 @@ export function ImportPage() {
       const { data: r } = await supabase.from('rules').select('*').eq('user_id', user.id)
       const ruleRows = (r ?? []) as Rule[]
 
-      let parserId: ParserId = parserFallback
+      let parserId: ParserId = parserFallback === 'auto' ? 'csv_brazil_v1' : parserFallback
       let text = ''
 
       const { data: catFresh } = await supabase.from('categories').select('*').eq('user_id', user.id)
@@ -581,7 +581,7 @@ export function ImportPage() {
         ]
         if (looksLikeInterCsv(text)) {
           parserId = 'csv_inter_v1'
-        } else if (csvModes.includes(parserFallback)) {
+        } else if (parserFallback !== 'auto' && csvModes.includes(parserFallback)) {
           parserId = parserFallback
         } else if (looksLikeNubankPlanilha) {
           parserId = 'csv_nubank_planilha_v1'
@@ -597,7 +597,15 @@ export function ImportPage() {
       } else {
         const buf = await file.arrayBuffer()
         text = await extractPdfText(buf)
-        parserId = detectParser(file.name, text) ?? parserFallback
+        const detected = detectParser(file.name, text) ?? (parserFallback === 'auto' ? null : parserFallback)
+        if (!detected) {
+          setFileError(
+            'Não reconheci de qual banco é este PDF. Abra “Opções avançadas”, escolha o tipo do arquivo e toque em “Ler de novo”. Se for de um banco que o app ainda não lê, me mande o arquivo.',
+          )
+          setFile(file)
+          return
+        }
+        parserId = detected
 
         if (parserId === 'fatura_cartao_pdf_v1') {
           const fatura = parseFaturaCartao(await extractPdfLayout(buf))
@@ -1037,19 +1045,7 @@ export function ImportPage() {
             )
           })}
         </ol>
-        {step === 'pick' ? (
-          <details className="rounded-2xl border border-border bg-surface px-3.5 py-2.5 text-sm text-muted">
-            <summary className="cursor-pointer font-medium text-foreground">Formatos aceitos</summary>
-            <p className="mt-2">
-              Prints do app do banco, faturas em PDF (Itaú, PicPay e outros), extratos em PDF, CSV ou TSV.{' '}
-              <strong>CSV do Finance</strong>: colunas <code className="text-xs">data</code>,{' '}
-              <code className="text-xs">descricao</code>, <code className="text-xs">valor</code>,{' '}
-              <code className="text-xs">tipo</code> (C/D ou entrada/saída); opcionais{' '}
-              <code className="text-xs">categoria</code> e <code className="text-xs">conta</code>. Separador{' '}
-              <strong>,</strong> ou <strong>;</strong> detectado automaticamente.
-            </p>
-          </details>
-        ) : null}
+
       </header>
 
       {fileError || (busy && progress && step === 'pick') ? (
@@ -1090,132 +1086,75 @@ export function ImportPage() {
       ) : null}
 
       {step === 'pick' ? (
-        <Card className="border-accent/30 bg-accent-muted/20">
-          <CardHeader className="space-y-1">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="size-4 text-accent" aria-hidden />
-              Print / Foto
-              <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-                novo
-              </span>
-            </CardTitle>
-            <CardDescription>
-              Envia, tira ou cola (Cmd/Ctrl+V) uma captura de tela do teu app do banco/cartão. O app
-              identifica data, valor e descrição de cada linha. Podes juntar várias imagens (na ordem em
-              que rolaste a tela — o que se repete entre prints entra uma vez só).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div role="radiogroup" aria-label="Como ler os prints" className="grid grid-cols-2 gap-1 rounded-xl bg-surface-elevated p-1 text-sm">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={shotMode === 'local'}
-                onClick={() => setShotMode('local')}
-                className={cn('rounded-lg px-3 py-2 text-left', shotMode === 'local' ? 'bg-surface font-semibold shadow-sm' : 'text-muted')}
-              >
-                No aparelho
-                <span className="block text-[11px] font-normal text-muted">Grátis e sem limite</span>
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={shotMode === 'ia'}
-                onClick={() => setShotMode('ia')}
-                className={cn('rounded-lg px-3 py-2 text-left', shotMode === 'ia' ? 'bg-surface font-semibold shadow-sm' : 'text-muted')}
-              >
-                Com IA
-                <span className="block text-[11px] font-normal text-muted">Mais precisa · usa cota Gemini</span>
-              </button>
+        <section className="space-y-3 rounded-3xl border border-border bg-surface p-[18px]">
+          {saveNotice ? (
+            <p role="status" className="rounded-xl bg-accent-muted px-3 py-2.5 text-sm">
+              {saveNotice}
+            </p>
+          ) : null}
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              addShotFiles(e.dataTransfer.files)
+            }}
+            className="flex flex-col items-center gap-2.5 rounded-2xl border-2 border-dashed border-border bg-background px-4 py-6 text-center"
+          >
+            <span className="flex size-12 items-center justify-center rounded-2xl bg-ink text-lime" aria-hidden>
+              <Upload className="size-6" />
+            </span>
+            <p className="text-[15px] font-semibold">Fatura, extrato ou prints</p>
+            <p className="max-w-sm text-xs text-muted">
+              PDF ou CSV do banco (Itaú, Nubank, Inter, PicPay, Mercado Pago…) ou prints da tela do app. O banco é
+              reconhecido sozinho e tudo é lido no seu aparelho.
+            </p>
+            <div className="mt-1 flex flex-wrap justify-center gap-2">
+              <Button type="button" onClick={() => shotInputRef.current?.click()} disabled={busy}>
+                <Upload className="size-4" />
+                {busy && !shots.length ? (progress ?? 'Lendo…') : 'Escolher arquivo'}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => shotCameraRef.current?.click()} disabled={busy}>
+                <Camera className="size-4" />
+                Tirar foto
+              </Button>
             </div>
-            {shotMode === 'local' ? (
-              <p className="text-xs text-muted">
-                Na primeira vez o leitor baixa o idioma português (~10 MB) e guarda no navegador. Depois, cada
-                print leva poucos segundos e nada sai do teu aparelho.
-              </p>
-            ) : null}
-            {shotMode === 'ia' && !isVisionConfigured() ? (
-              <p className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
-                Configura <code className="rounded bg-surface-elevated px-1 text-xs">VITE_GEMINI_API_KEY</code>{' '}
-                no build para ativar a extração por IA (Gemini multimodal).
-              </p>
-            ) : null}
-
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault()
-                addShotFiles(e.dataTransfer.files)
+            <p className="hidden text-[11px] text-muted sm:block">
+              ou arraste para cá · cole um print com <kbd className="rounded bg-surface px-1">Cmd/Ctrl+V</kbd>
+            </p>
+            <input
+              ref={shotInputRef}
+              type="file"
+              accept="image/*,.heic,.heif,.pdf,application/pdf,.csv,text/csv,.tsv,.txt"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                addShotFiles(e.target.files)
+                if (e.target) e.target.value = ''
               }}
-              className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border/70 bg-surface/50 p-5 text-center text-sm"
-            >
-              <p className="text-muted">
-                Arraste prints ou o PDF da fatura aqui, cole com <kbd className="rounded bg-surface-elevated px-1">Cmd/Ctrl+V</kbd>
-                {' '}ou use os botões:
-              </p>
-              <div className="flex flex-wrap justify-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => shotInputRef.current?.click()}
-                  disabled={busy}
-                >
-                  <ImagePlus className="size-4" />
-                  Escolher prints ou PDF
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => shotCameraRef.current?.click()}
-                  disabled={busy}
-                >
-                  <Camera className="size-4" />
-                  Tirar foto
-                </Button>
-              </div>
-              <input
-                ref={shotInputRef}
-                type="file"
-                accept="image/*,.heic,.heif,.pdf,application/pdf,.csv,text/csv"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  addShotFiles(e.target.files)
-                  if (e.target) e.target.value = ''
-                }}
-              />
-              <input
-                ref={shotCameraRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => {
-                  addShotFiles(e.target.files)
-                  if (e.target) e.target.value = ''
-                }}
-              />
-            </div>
+            />
+            <input
+              ref={shotCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                addShotFiles(e.target.files)
+                if (e.target) e.target.value = ''
+              }}
+            />
+          </div>
 
-            {shots.length > 0 ? (
+          {shots.length > 0 ? (
+            <div className="space-y-3">
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {shots.map((s) => (
-                  <div
-                    key={s.id}
-                    className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated"
-                  >
-                    <img
-                      src={s.previewUrl}
-                      alt="Preview do print"
-                      className="h-24 w-full object-cover"
-                    />
+                  <div key={s.id} className="relative overflow-hidden rounded-xl border border-border bg-background">
+                    <img src={s.previewUrl} alt="Print escolhido" className="h-24 w-full object-cover" />
                     <button
                       type="button"
                       onClick={() => removeShot(s.id)}
-                      className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white transition hover:bg-black/80"
-                      title="Remover imagem"
+                      className="absolute right-1 top-1 rounded-full bg-black/60 p-1.5 text-white transition hover:bg-black/80"
                       aria-label="Remover imagem"
                     >
                       <X className="size-3" />
@@ -1223,142 +1162,137 @@ export function ImportPage() {
                   </div>
                 ))}
               </div>
-            ) : null}
-
-            {shots.length > 0 ? (
               <div>
-                <Label>Contexto (opcional)</Label>
+                <Label htmlFor="shot-hint">Contexto (opcional)</Label>
                 <Input
-                  placeholder="Ex.: fatura Nubank cartão final 1234, outubro/2025"
+                  id="shot-hint"
+                  placeholder="Ex.: fatura Nubank, cartão final 1234, outubro"
                   value={shotHint}
                   onChange={(e) => setShotHint(e.target.value)}
                 />
               </div>
-            ) : null}
-
-            {shotError ? <p className="text-sm text-danger">{shotError}</p> : null}
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                disabled={(shotMode === 'ia' && !isVisionConfigured()) || shots.length === 0 || busy}
-                onClick={() => void extractFromShots()}
-              >
-                <Sparkles className="size-4" />
-                {busy
-                  ? (progress ?? 'A ler…')
-                  : `Ler ${shots.length || ''} imagem(ns)${shotMode === 'ia' ? ' com IA' : ''}`}
-              </Button>
-              {shots.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  disabled={(shotMode === 'ia' && !isVisionConfigured()) || busy}
+                  onClick={() => void extractFromShots()}
+                >
+                  <Sparkles className="size-4" />
+                  {busy ? (progress ?? 'Lendo…') : `Ler ${shots.length} ${shots.length === 1 ? 'print' : 'prints'}${shotMode === 'ia' ? ' com IA' : ''}`}
+                </Button>
                 <Button type="button" variant="secondary" onClick={clearShots} disabled={busy}>
                   Limpar
                 </Button>
-              ) : null}
+              </div>
+              <p className="text-xs text-muted">Vários prints da mesma tela? Pode mandar todos: o que se repete entre eles entra uma vez só.</p>
             </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {step === 'pick' ? (
-        <Card>
-          {saveNotice ? (
-            <CardContent className="pb-0 pt-5">
-              <p className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
-                {saveNotice}
-              </p>
-            </CardContent>
           ) : null}
-          <CardHeader>
-            <CardTitle className="text-base">Arquivo (PDF / CSV)</CardTitle>
-            <CardDescription>
-              PDF: o parser é escolhido por detecção (nome + texto). Use o seletor como fallback se
-              necessário.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <input
-              type="file"
-              accept=".pdf,application/pdf,.csv,text/csv,.tsv,.txt"
-              aria-label="Escolher PDF ou CSV"
-              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-fg"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                e.target.value = ''
-                if (f) void parseFile(f)
-              }}
-            />
-            {file ? <p className="truncate text-xs text-muted">Arquivo: {file.name}</p> : null}
-            <div>
-              <Label>Tipo (PDF ou CSV)</Label>
-              <select
-                className="mt-1 flex h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm"
-                value={parserFallback}
-                onChange={(e) => setParserFallback(e.target.value as ParserId)}
-              >
-                {PARSER_OPTIONS.filter((p) => p.id !== 'screenshot_ai_v1').map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+          {shotError ? <p className="text-sm text-danger">{shotError}</p> : null}
+
+          <details className="rounded-2xl border border-border px-3.5 py-2.5 text-sm">
+            <summary className="cursor-pointer font-medium">Opções avançadas</summary>
+            <div className="mt-3 space-y-4">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted">Como ler prints</p>
+                <div role="radiogroup" aria-label="Como ler os prints" className="grid grid-cols-2 gap-1 rounded-xl bg-background p-1 text-sm">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={shotMode === 'local'}
+                    onClick={() => setShotMode('local')}
+                    className={cn('rounded-lg px-3 py-2 text-left', shotMode === 'local' ? 'bg-surface font-semibold shadow-sm' : 'text-muted')}
+                  >
+                    No aparelho
+                    <span className="block text-[11px] font-normal text-muted">Grátis e sem limite</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={shotMode === 'ia'}
+                    onClick={() => setShotMode('ia')}
+                    className={cn('rounded-lg px-3 py-2 text-left', shotMode === 'ia' ? 'bg-surface font-semibold shadow-sm' : 'text-muted')}
+                  >
+                    Com IA
+                    <span className="block text-[11px] font-normal text-muted">Mais precisa · usa cota do Gemini</span>
+                  </button>
+                </div>
+                {shotMode === 'local' ? (
+                  <p className="text-xs text-muted">Na primeira vez o leitor baixa o idioma português (~10 MB). Depois, cada print leva poucos segundos e nada sai do seu aparelho.</p>
+                ) : !isVisionConfigured() ? (
+                  <p className="text-xs text-warning">A leitura com IA não está configurada neste app (falta a chave do Gemini). Use “No aparelho”.</p>
+                ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="parser-tipo">Tipo do arquivo</Label>
+                <select
+                  id="parser-tipo"
+                  className="flex h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
+                  value={parserFallback}
+                  onChange={(e) => setParserFallback(e.target.value as ParserId | 'auto')}
+                >
+                  <option value="auto">Detectar automaticamente (recomendado)</option>
+                  {PARSER_OPTIONS.filter((p) => p.id !== 'screenshot_ai_v1' && p.id !== 'screenshot_local_v1').map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                {file && parserFallback !== 'auto' ? (
+                  <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={() => void parseFile()}>
+                    Ler “{file.name.slice(0, 28)}” de novo com este tipo
+                  </Button>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted">
+                <strong>CSV do próprio app</strong>: colunas <code>data</code>, <code>descricao</code>, <code>valor</code>,{' '}
+                <code>tipo</code> (C/D ou entrada/saída); opcionais <code>categoria</code> e <code>conta</code>. Separador , ou ;
+              </p>
             </div>
-            <Button type="button" disabled={!file || busy} onClick={() => void parseFile()}>
-              {busy ? (progress ?? 'Lendo…') : 'Analisar arquivo'}
-            </Button>
-          </CardContent>
-        </Card>
+          </details>
+        </section>
       ) : null}
 
       {step === 'pick' ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Arquivos importados</CardTitle>
-            <CardDescription>
-              Remove o registo do ficheiro e <strong>todos</strong> os lançamentos criados nessa importação
-              (os que ficaram de fora por duplicados não são apagados).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {importError ? (
-              <p className="text-sm text-danger">{importError}</p>
-            ) : null}
+        <details className="rounded-3xl border border-border bg-surface px-[18px] py-3.5">
+          <summary className="cursor-pointer text-base font-semibold">
+            Arquivos importados{importRows.length ? ` (${importRows.length})` : ''}
+          </summary>
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-muted">“Apagar” remove o arquivo e todos os lançamentos que vieram dele.</p>
+            {importError ? <p className="text-sm text-danger">{importError}</p> : null}
             {importsLoading ? (
-              <p className="text-sm text-muted">A carregar…</p>
+              <p className="text-sm text-muted">Carregando…</p>
             ) : importRows.length === 0 ? (
-              <p className="text-sm text-muted">Ainda não há importações guardadas nesta conta.</p>
+              <p className="text-sm text-muted">Nenhum arquivo importado ainda.</p>
             ) : (
-              <ul className="space-y-2">
+              <ul className="divide-y divide-border">
                 {importRows.map((row) => (
-                  <li
-                    key={row.file.id}
-                    className="flex flex-col gap-2 rounded-xl border border-border bg-surface-elevated/50 p-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{row.file.filename}</p>
-                      <p className="text-xs text-muted">
-                        {format(parseISO(row.file.created_at), "d MMM yyyy 'às' HH:mm", {
-                          locale: ptBR,
-                        })}{' '}
-                        · {row.txCount} lançamento(s) · {parserLabel(row.batch.parser_id)}
+                  <li key={row.file.id} className="flex items-center gap-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{row.file.filename}</p>
+                      <p className="truncate text-xs text-muted">
+                        {format(parseISO(row.file.created_at), "d MMM yyyy 'às' HH:mm", { locale: ptBR })} · {row.txCount} lançamento(s) ·{' '}
+                        {parserLabel(row.batch.parser_id)}
                       </p>
                     </div>
                     <Button
                       type="button"
-                      variant="danger"
+                      variant="ghost"
                       size="sm"
-                      className="shrink-0 gap-1"
+                      className="shrink-0 text-danger"
                       disabled={deletingId === row.file.id}
                       onClick={() => void removeImport(row)}
+                      aria-label={`Apagar ${row.file.filename} e seus lançamentos`}
                     >
                       <Trash2 className="size-4" />
-                      {deletingId === row.file.id ? 'A apagar…' : 'Apagar arquivo e lançamentos'}
+                      {deletingId === row.file.id ? 'Apagando…' : 'Apagar'}
                     </Button>
                   </li>
                 ))}
               </ul>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </details>
       ) : null}
 
       {step === 'review' ? (

@@ -1,9 +1,10 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Check, ChevronLeft, ChevronRight, CircleDashed, Mail, Plus, TriangleAlert, Trash2, Upload } from 'lucide-react'
+import { Check, ChevronRight, CircleDashed, Mail, Plus, TriangleAlert, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { MonthSwitcher } from '@/components/ui/month-switcher'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCoverage } from '@/hooks/useCoverage'
 import { useMonthData } from '@/hooks/useMonthData'
@@ -84,7 +85,6 @@ export function FechamentoPage() {
     }
   }
 
-  const monthLabel = format(parseISO(`${month}-01`), "LLLL 'de' yyyy", { locale: ptBR })
   const monthName = format(parseISO(`${month}-01`), 'LLLL', { locale: ptBR })
   const allAccounts = cov.done === cov.total
   const closed = allAccounts && pend.total === 0 && !cov.loading && !cons.loading
@@ -95,26 +95,14 @@ export function FechamentoPage() {
     <div className="space-y-4 pb-24">
       <header className="space-y-3.5">
         <h1 className="text-[30px] font-bold tracking-tight">Fechamento do mês</h1>
-        <div className="flex items-center justify-between rounded-2xl border border-border bg-surface px-1">
-          <button type="button" aria-label="Mês anterior" onClick={() => {
+        <MonthSwitcher
+          month={month}
+          range={cov.bounds}
+          onChange={(d) => {
             setTouched(true)
-            setMonth((m) => shiftMonth(m, -1))
-          }} className="flex size-10 items-center justify-center text-muted">
-            <ChevronLeft className="size-5" />
-          </button>
-          <span className="text-center">
-            <span className="block text-sm font-semibold capitalize">{monthLabel}</span>
-            <span className="block text-xs text-muted">
-              {cov.bounds.start.slice(8)}/{cov.bounds.start.slice(5, 7)} a {cov.bounds.end.slice(8)}/{cov.bounds.end.slice(5, 7)}
-            </span>
-          </span>
-          <button type="button" aria-label="Próximo mês" onClick={() => {
-            setTouched(true)
-            setMonth((m) => shiftMonth(m, 1))
-          }} className="flex size-10 items-center justify-center text-muted">
-            <ChevronRight className="size-5" />
-          </button>
-        </div>
+            setMonth((m) => shiftMonth(m, d))
+          }}
+        />
       </header>
 
       <section className="space-y-3 rounded-3xl bg-ink p-5 text-white">
@@ -169,7 +157,7 @@ export function FechamentoPage() {
                 >
                   {ok ? <Check className="size-5" /> : c.status === 'parcial' ? <TriangleAlert className="size-5" /> : <CircleDashed className="size-5" />}
                 </span>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-[55%] flex-1">
                   <p className="text-sm font-semibold">
                     {c.account.name}
                     <span className="sr-only">: {ok ? 'completo' : c.status === 'parcial' ? 'incompleto' : 'faltando'}</span>
@@ -186,7 +174,7 @@ export function FechamentoPage() {
                     <Trash2 className="size-4" />
                   </Button>
                 ) : (
-                  <div className="flex gap-1.5">
+                  <div className="ml-auto flex gap-1.5">
                     {c.manual ? (
                       <Button size="sm" variant="ghost" disabled={busy === c.account.id} onClick={() => void mark(c, false)}>
                         Desfazer

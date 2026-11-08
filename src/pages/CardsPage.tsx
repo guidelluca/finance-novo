@@ -38,7 +38,7 @@ const EMPTY_FORM: CardForm = {
   limitBrl: '',
   closingDay: '1',
   dueDay: '10',
-  color: '#6366f1',
+  color: '#14161a',
 }
 
 function parseBrToCents(raw: string): number | null {
@@ -111,7 +111,7 @@ export function CardsPage() {
         limitBrl: centsToBr(card.limit_cents ?? null),
         closingDay: String(card.closing_day),
         dueDay: String(card.due_day),
-        color: card.color ?? '#6366f1',
+        color: card.color ?? '#14161a',
       })
     } else {
       setEditingId(null)
@@ -133,7 +133,7 @@ export function CardsPage() {
     setFormError(null)
     const name = form.name.trim()
     if (!name) {
-      setFormError('Dá um nome ao cartão (ex.: Nubank Ultravioleta).')
+      setFormError('Dê um nome ao cartão (ex.: Nubank Ultravioleta).')
       return
     }
     const closingDay = Number(form.closingDay)
@@ -230,7 +230,7 @@ export function CardsPage() {
               {editingId ? 'Editar cartão' : 'Novo cartão'}
             </CardTitle>
             <CardDescription>
-              Define fechamento e vencimento para calcular a fatura corretamente.
+              Informe o dia de fechamento e de vencimento para calcular a fatura certinho.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -310,7 +310,7 @@ export function CardsPage() {
               {formError ? <p className="text-sm text-danger">{formError}</p> : null}
               <div className="flex gap-2">
                 <Button type="submit" disabled={submitting}>
-                  {submitting ? 'A guardar…' : 'Guardar'}
+                  {submitting ? 'Salvando…' : 'Salvar'}
                 </Button>
                 <Button type="button" variant="secondary" onClick={closeForm}>
                   Cancelar
@@ -322,7 +322,7 @@ export function CardsPage() {
       ) : null}
 
       {loading ? (
-        <p className="text-muted">A carregar…</p>
+        <p className="text-muted">Carregando…</p>
       ) : cards.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center">
@@ -387,7 +387,7 @@ function CardRow({ card, txs, open, onToggle, openCycleKey, setOpenCycleKey, onE
       ? Math.min(100, Math.round((currentTotal / card.limit_cents) * 100))
       : null
 
-  const color = card.color || '#6366f1'
+  const color = card.color || '#14161a'
 
   const activeCycle = openCycleKey
     ? history.find((c) => c.key === openCycleKey) ?? current

@@ -96,7 +96,8 @@ export function FloatingAiChat() {
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'fixed z-[60] flex size-14 items-center justify-center rounded-full border border-border bg-primary text-primary-fg shadow-[var(--shadow-card)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+          // no celular ele cobria valores e botões: lá o chat abre por “Perguntar” (Início) e pelo menu
+          'fixed z-[60] hidden size-14 items-center lg:flex justify-center rounded-full border border-border bg-primary text-primary-fg shadow-[var(--shadow-card)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
           open && 'pointer-events-none opacity-0',
         )}
         style={{ right: 'max(1rem, env(safe-area-inset-right))', bottom: bottomOffset }}
@@ -124,7 +125,7 @@ export function FloatingAiChat() {
                   Assistente
                 </h2>
                 <p className="text-xs text-muted">
-                  Usa o teu extrato (resumo + últimos 90 dias atualizados em cada mensagem)
+                  Usa o seu extrato (resumo + últimos 90 dias, atualizados a cada mensagem)
                 </p>
               </div>
               <div className="flex items-center gap-1">
@@ -151,9 +152,9 @@ export function FloatingAiChat() {
             <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
               {messages.length === 0 ? (
                 <p className="text-sm text-muted">
-                  Pergunta onde estás a gastar mais, quanto podes poupar, ou estratégias para cortar custos.
-                  Abre Início ou Análise uma vez para carregar o resumo mensal; em cada resposta usamos também os
-                  teus lançamentos recentes.
+                  Pergunte onde você está gastando mais, quanto dá para guardar ou como cortar custos.
+                  Abra o Início uma vez para carregar o resumo do mês; cada resposta também usa os seus
+                  lançamentos recentes.
                 </p>
               ) : (
                 messages.map((m, i) => (
@@ -182,7 +183,7 @@ export function FloatingAiChat() {
               <div className="flex gap-2">
                 <textarea
                   className="min-h-[44px] flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                  placeholder="Escreve a tua pergunta…"
+                  placeholder="Escreva sua pergunta…"
                   rows={2}
                   value={input}
                   maxLength={4000}

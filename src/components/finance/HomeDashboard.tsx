@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useChartTheme } from '@/hooks/useChartTheme'
 import { formatBRLFromCents } from '@/lib/currency'
 import { consolidateMonth, shiftMonth, type ConsolidatedMonth, type ConsTx } from '@/lib/monthConsolidation'
+import { detectRecurring } from '@/lib/recurring'
 import { paymentMethodOf, type CardInfo, type MethodGroup } from '@/lib/paymentMethod'
 import type { Periods } from '@/lib/period'
 import { supabase } from '@/lib/supabase'
@@ -181,7 +182,17 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
   const days = dayIndex(range.end, range.start) + 1
   const elapsed = isCurrent ? refDay : days
   const perDay = elapsed ? Math.round(spent / elapsed) : 0
-  const projection = isCurrent ? Math.round(perDay * days) : null
+  // projeção = ritmo dos gastos do dia a dia + contas fixas que ainda vão cair (aluguel, assinaturas…)
+  const upcomingFixed = useMemo(
+    () =>
+      isCurrent
+        ? detectRecurring(month, monthTxs, history, owner)
+            .filter((r) => !r.paidThisMonth)
+            .reduce((s, r) => s + r.amountCents, 0)
+        : 0,
+    [isCurrent, month, monthTxs, history, owner],
+  )
+  const projection = isCurrent ? Math.round(perDay * days) + upcomingFixed : null
   const past3 = monthly.slice(2, 5).filter((m) => m.hasData)
   const avg3 = past3.length ? Math.round((past3.reduce((s, m) => s + m.saidas, 0) / past3.length) * 100) : null
   const vsAvg = avg3 ? (projection ?? spent) / avg3 - 1 : null
@@ -207,7 +218,7 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
         {[
           { label: 'Média por dia', value: short(perDay), note: `${elapsed} de ${days} dias` },
           projection != null
-            ? { label: 'Projeção do mês', value: short(projection), note: 'no ritmo atual' }
+            ? { label: 'Projeção do mês', value: short(projection), note: upcomingFixed ? `com ${short(upcomingFixed)} de contas fixas` : 'no ritmo atual' }
             : { label: 'Gasto no mês', value: short(spent), note: 'mês fechado' },
           {
             label: 'Vs. média 3 meses',
@@ -228,10 +239,10 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
       <Section title="Gasto acumulado" subtitle={`Dia a dia do mês financeiro (${range.start.slice(8)}/${range.start.slice(5, 7)}–${range.end.slice(8)}/${range.end.slice(5, 7)}), comparado ao mês anterior`}>
         <div className="h-48" role="img" aria-label={`Gasto acumulado: ${money(spent)} até agora${prev.hasData ? `; no mesmo ponto do mês anterior, ${money(Math.round((cumulative[Math.min(elapsed, cumulative.length) - 1]?.anterior ?? 0) * 100))}` : ''}`}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={cumulative} margin={{ top: 6, right: 8, bottom: 0, left: -8 }}>
+            <LineChart data={cumulative} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={ct.grid} vertical={false} />
               <XAxis dataKey="dia" tick={{ fill: ct.axis, fontSize: 11 }} tickLine={false} axisLine={false} interval={Math.max(0, Math.floor(cumulative.length / 5) - 1)} />
-              <YAxis tick={{ fill: ct.axis, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={brlTick} width={48} />
+              <YAxis tick={{ fill: ct.axis, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={brlTick} width={62} />
               <Tooltip contentStyle={tooltipStyle} formatter={brlTip} labelFormatter={(l) => `Dia ${l}`} />
               <Legend iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
               {prev.hasData ? (
@@ -256,7 +267,16 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
         <ul className="space-y-2.5">
           {cats.map((c) => (
             <li key={c.name}>
-              <Link to={c.id ? `/transactions?month=${month}&category=${encodeURIComponent(c.name)}` : `/transactions?month=${month}`} className="block space-y-1">
+              <Link
+                to={
+                  c.id
+                    ? `/transactions?month=${month}&category=${encodeURIComponent(c.name)}`
+                    : c.name === 'Sem categoria'
+                      ? `/transactions?month=${month}&category=none`
+                      : `/transactions?month=${month}`
+                }
+                className="block space-y-1"
+              >
                 <div className="flex items-baseline justify-between gap-2 text-sm">
                   <span className="truncate font-medium">{c.name}</span>
                   <span className="shrink-0 tabular-nums">
@@ -266,7 +286,9 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
                 <div className="h-2 rounded-full bg-background">
                   <div className="h-2 rounded-full bg-[var(--series-1)]" style={{ width: `${Math.max(2, (c.cents / maxCat) * 100)}%` }} />
                 </div>
-                {c.avg ? (
+                {c.id === null && c.name === 'Sem categoria' ? (
+                  <p className="text-[11px] font-semibold text-warning">Toque para categorizar</p>
+                ) : c.avg ? (
                   <p className={cn('text-[11px]', c.cents > c.avg * 1.2 ? 'text-danger' : 'text-muted')}>
                     média 3 meses {money(c.avg)}
                     {c.cents > c.avg * 1.2 ? ` · ${Math.round((c.cents / c.avg - 1) * 100)}% acima` : ''}
@@ -310,7 +332,7 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
         <Section title="Entradas × saídas" subtitle="Últimos 6 meses financeiros, sem repetidas nem transferências entre suas contas">
           <div className="h-52" role="img" aria-label={monthly.map((m) => `${m.label}: entradas ${money(Math.round(m.entradas * 100))}, saídas ${money(Math.round(m.saidas * 100))}`).join('; ')}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthly} margin={{ top: 6, right: 8, bottom: 0, left: -8 }} barGap={2} barCategoryGap="28%">
+              <BarChart data={withData} margin={{ top: 6, right: 8, bottom: 0, left: 0 }} barGap={2} barCategoryGap="28%">
                 <CartesianGrid stroke={ct.grid} vertical={false} />
                 <XAxis dataKey="label" tick={{ fill: ct.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fill: ct.axis, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={brlTick} width={48} />
@@ -343,7 +365,7 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
               <tbody>
                 {monthly.map((m) => (
                   <tr key={m.key} className="border-t border-border">
-                    <td className="py-1 capitalize">{m.label}</td>
+                    <td className="py-1 first-letter:uppercase">{m.label}</td>
                     <td className="py-1 text-right">{money(Math.round(m.entradas * 100))}</td>
                     <td className="py-1 text-right">{money(Math.round(m.saidas * 100))}</td>
                     <td className={cn('py-1 text-right', m.entradas - m.saidas < 0 && 'text-danger')}>{money(Math.round((m.entradas - m.saidas) * 100))}</td>

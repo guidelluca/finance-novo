@@ -44,13 +44,17 @@ function median(xs: number[]): number {
 }
 
 /** Gastos que se repetem em pelo menos 2 dos 3 meses anteriores com valor parecido (±15%). */
-export function detectRecurring(month: string, monthTxs: ConsTx[], history: ConsTx[]): Recurring[] {
+export function detectRecurring(month: string, monthTxs: ConsTx[], history: ConsTx[], ownerName: string | null = null): Recurring[] {
+  const fold = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+  const own = ownerName && ownerName.trim().includes(' ') ? fold(ownerName.trim()) : null
   const last3 = [1, 2, 3].map((k) => shiftMonth(month, -k))
   const hist = history.filter((t) => t.kind === 'debit' && last3.includes(t.date.slice(0, 7))).map(asItem)
   const cur = monthTxs.filter((t) => t.kind === 'debit').map(asItem)
   const groups: ConsItem[][] = []
   for (const t of hist) {
-    if (/pagamento.*fatura|aplica[cç][aã]o|resgate/i.test(t.description)) continue
+    // não são contas: fatura, aplicação/resgate e dinheiro entre suas próprias contas
+    if (/pagamento.*fatura|fatura paga|aplica[cç][aã]o|resgate|\brdb\b|\bcdb\b|conta pr[oó]pria/i.test(t.description)) continue
+    if (own && fold(t.description).includes(own)) continue
     const g = groups.find((gr) => similarMerchant(gr[0]!, t))
     if (g) g.push(t)
     else groups.push([t])

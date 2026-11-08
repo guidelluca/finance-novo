@@ -231,6 +231,25 @@ const OPERATION_PREFIX =
   /^(pix qrs?|pix cart[aã]o|pag boleto|pix (enviado|recebido|agendado)|pix transf(?:er[eê]ncia)?(?: para)?|transf(?:er[eê]ncia)? pix|transfer[eê]ncia (enviada|recebida)|ted (enviada|recebida)|doc (enviado|recebido)|compra no (d[eé]bito|cr[eé]dito)|compra com cart[aã]o|pagamento de boleto|pagamento (efetuado|realizado)|boleto pago|d[eé]bito autom[aá]tico)\b\s*[·:\-–]?\s*/i
 
 export function identifyMerchant(raw: string, cityHint?: string | null): MerchantInfo {
+  // Nubank / Inter escrevem a operação antes do nome e o CPF/banco depois:
+  // "Transferência enviada pelo Pix - FULANO - •••.123.578-•• - BANCO INTER (0077) ..."
+  // "Pagamento de boleto efetuado - LANZA IMOVEIS LTDA" · "Pix recebido: Cp :18236120-Fulano de Tal"
+  const nuOp = raw.match(
+    /^(transfer[eê]ncia (enviada|recebida)( pelo pix)?|pagamento de boleto efetuado|pagamento de fatura|compra no d[eé]bito( via nupay)?|pix (enviado|recebido)|pagamento efetuado|estorno)\s*[-:–]\s*(.+)$/i,
+  )
+  if (nuOp && !/·\s*conta pr[oó]pria$/i.test(raw)) {
+    const rest = nuOp[6]!
+      .replace(/^"|"$/g, '')
+      .replace(/^cp\s*:\s*\d+\s*-\s*/i, '')
+      .split(/\s+-\s+(?=[•*\d]|cpf|cnpj|ag[eê]ncia|banco|bco|nu pagamentos|caixa|ita[uú]|picpay|mercado pago|inter\b)/i)[0]!
+      .trim()
+    if (rest.length >= 2) {
+      const inner = identifyMerchant(rest, cityHint)
+      const op = nuOp[1]!.toLowerCase()
+      const kind = /boleto/.test(op) ? 'Boleto' : /pix|transfer/.test(op) ? (/recebid/.test(op) ? 'Pix recebido' : 'Pix enviado') : /d[eé]bito/.test(op) ? 'Débito' : inner.kind
+      return { ...inner, kind: inner.categories.length ? inner.kind : kind }
+    }
+  }
   if (/·\s*conta pr[oó]pria$/i.test(raw)) {
     return {
       name: 'Você · outra conta',

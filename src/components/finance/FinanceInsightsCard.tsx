@@ -104,7 +104,7 @@ export function FinanceInsightsCard({
           </p>
         ) : null}
         <Button type="button" size="sm" disabled={!configured || loading} onClick={() => void run()}>
-          {loading ? 'A gerar…' : 'Gerar análise personalizada'}
+          {loading ? 'Gerando…' : 'Gerar análise personalizada'}
         </Button>
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {text ? (

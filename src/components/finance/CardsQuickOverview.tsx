@@ -86,7 +86,7 @@ export function CardsQuickOverview({ userId }: Props) {
       </CardHeader>
       <CardContent className="space-y-2">
         {rows.slice(0, 4).map(({ card, current, currentTotal }) => {
-          const color = card.color || '#6366f1'
+          const color = card.color || '#14161a'
           const pct =
             card.limit_cents && card.limit_cents > 0
               ? Math.min(100, Math.round((currentTotal / card.limit_cents) * 100))

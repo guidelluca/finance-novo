@@ -371,7 +371,7 @@ export function TransactionsPage() {
     setAiError(null)
     const names = categories.map((c) => c.name.trim()).filter(Boolean)
     if (names.length === 0) {
-      setAiError('Cria pelo menos uma categoria em Categorias antes de usar a IA.')
+      setAiError('Crie pelo menos uma categoria em Categorias antes de usar a IA.')
       return
     }
     if (uncategorizedForAi.length === 0) {
@@ -495,7 +495,7 @@ export function TransactionsPage() {
         >
           ‹
         </button>
-        <span className="min-w-[9rem] text-center text-sm capitalize">
+        <span className="min-w-[9rem] text-center text-sm first-letter:uppercase inline-block">
           {format(month, 'MMM yyyy', { locale: ptBR })}
         </span>
         <button
@@ -531,8 +531,8 @@ export function TransactionsPage() {
               Categorizar com IA (Gemini → Groq se quota)
             </CardTitle>
             <p className="text-xs text-muted">
-              Sugestões só usam os nomes das tuas categorias. Até {sliceForCategorize(uncategorizedForAi).length} de{' '}
-              {uncategorizedForAi.length} despesas sem categoria neste mês por pedido. Confirma antes de aplicar.
+              As sugestões só usam os nomes das suas categorias. Até {sliceForCategorize(uncategorizedForAi).length} de{' '}
+              {uncategorizedForAi.length} despesas sem categoria neste mês por pedido. Confira antes de aplicar.
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -555,7 +555,7 @@ export function TransactionsPage() {
                 disabled={!isFinanceLlmConfigured() || aiLoading || categories.length === 0}
                 onClick={() => void runAiCategorize()}
               >
-                {aiLoading ? 'A analisar…' : 'Pedir sugestões'}
+                {aiLoading ? 'Analisando…' : 'Pedir sugestões'}
               </Button>
               {aiSuggestions.length > 0 ? (
                 <Button

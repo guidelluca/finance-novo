@@ -1,8 +1,8 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { MonthSwitcher } from '@/components/ui/month-switcher'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMonthData } from '@/hooks/useMonthData'
 import { usePeriods } from '@/hooks/usePeriods'
@@ -144,30 +144,21 @@ export function BudgetPage() {
 
   return (
     <div className="space-y-3.5 pb-24">
-      <header className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1">
-          <button type="button" aria-label="Mês anterior" onClick={() => {
-            setTouched(true)
-            setMonth((m) => shiftMonth(m, -1))
-          }} className="flex size-9 items-center justify-center rounded-xl text-muted hover:bg-surface">
-            <ChevronLeft className="size-4" />
-          </button>
-          <div>
-            <p className="text-[13px] capitalize text-muted">
-              {monthName} · {range.start.slice(8)}/{range.start.slice(5, 7)}–{range.end.slice(8)}/{range.end.slice(5, 7)}
-            </p>
-            <h1 className="text-[30px] font-bold leading-tight tracking-tight">Orçamento</h1>
-          </div>
-          <button type="button" aria-label="Próximo mês" onClick={() => {
-            setTouched(true)
-            setMonth((m) => shiftMonth(m, 1))
-          }} className="flex size-9 items-center justify-center rounded-xl text-muted hover:bg-surface">
-            <ChevronRight className="size-4" />
-          </button>
+      <header className="space-y-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-[30px] font-bold leading-tight tracking-tight">Orçamento</h1>
+          <Button variant="secondary" className="rounded-[14px]" onClick={() => setEditing(true)}>
+            Ajustar limites
+          </Button>
         </div>
-        <Button variant="secondary" className="rounded-[14px]" onClick={() => setEditing(true)}>
-          Ajustar limites
-        </Button>
+        <MonthSwitcher
+          month={month}
+          range={range}
+          onChange={(d) => {
+            setTouched(true)
+            setMonth((m) => shiftMonth(m, d))
+          }}
+        />
       </header>
 
       {error ? <p className="rounded-2xl border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{error}</p> : null}

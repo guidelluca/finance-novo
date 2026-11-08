@@ -1,9 +1,9 @@
-import { format, parseISO } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Download, EyeOff, Info } from 'lucide-react'
+import { format } from 'date-fns'
+import { AlertTriangle, ChevronDown, Download, EyeOff, Info } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { MonthSwitcher } from '@/components/ui/month-switcher'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePeriods } from '@/hooks/usePeriods'
@@ -251,7 +251,6 @@ export function MonthPage() {
     URL.revokeObjectURL(a.href)
   }
 
-  const monthLabel = format(parseISO(`${month}-01`), "MMMM 'de' yyyy", { locale: ptBR })
   const { totals } = result
   const excludedByReason = useMemo(() => {
     const m = new Map<string, typeof result.excluded>()
@@ -265,25 +264,19 @@ export function MonthPage() {
 
   return (
     <div className="space-y-5 pb-24">
-      <header className="flex items-center justify-between gap-2">
-        <Button variant="ghost" size="icon" aria-label="Mês anterior" onClick={() => {
-            setTouched(true)
-            setMonth((m) => shiftMonth(m, -1))
-          }}>
-          <ChevronLeft className="size-5" />
-        </Button>
-        <div className="text-center">
-          <p className="text-xs text-muted">
-            Extrato consolidado · {range.start.slice(8)}/{range.start.slice(5, 7)}–{range.end.slice(8)}/{range.end.slice(5, 7)}
-          </p>
-          <h1 className="text-xl font-semibold capitalize tracking-tight">{monthLabel}</h1>
+      <header className="space-y-3.5">
+        <div>
+          <h1 className="text-[30px] font-bold leading-tight tracking-tight">Mês consolidado</h1>
+          <p className="text-sm text-muted">Tudo de todas as contas, sem repetição, com o que precisa de revisão.</p>
         </div>
-        <Button variant="ghost" size="icon" aria-label="Próximo mês" onClick={() => {
+        <MonthSwitcher
+          month={month}
+          range={range}
+          onChange={(d) => {
             setTouched(true)
-            setMonth((m) => shiftMonth(m, 1))
-          }}>
-          <ChevronRight className="size-5" />
-        </Button>
+            setMonth((m) => shiftMonth(m, d))
+          }}
+        />
       </header>
 
       {error ? <p className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{error}</p> : null}
@@ -301,7 +294,7 @@ export function MonthPage() {
             <Card>
               <CardContent className="p-3">
                 <p className="text-xs text-muted">Entrou</p>
-                <p className="font-mono text-base font-semibold tabular-nums text-positive">
+                <p className="truncate text-[15px] font-semibold tabular-nums text-positive">
                   {formatBRLFromCents(totals.incomeCents)}
                 </p>
               </CardContent>
@@ -309,7 +302,7 @@ export function MonthPage() {
             <Card>
               <CardContent className="p-3">
                 <p className="text-xs text-muted">Saiu</p>
-                <p className="font-mono text-base font-semibold tabular-nums">{formatBRLFromCents(totals.expenseCents)}</p>
+                <p className="truncate text-[15px] font-semibold tabular-nums">{formatBRLFromCents(totals.expenseCents)}</p>
               </CardContent>
             </Card>
             <Card>
@@ -317,7 +310,7 @@ export function MonthPage() {
                 <p className="text-xs text-muted">Sobrou</p>
                 <p
                   className={cn(
-                    'font-mono text-base font-semibold tabular-nums',
+                    'truncate text-[15px] font-semibold tabular-nums',
                     totals.netCents < 0 ? 'text-danger' : 'text-accent',
                   )}
                 >
@@ -404,7 +397,7 @@ export function MonthPage() {
                             <li key={t.id} className="flex flex-wrap items-center gap-2">
                               <span className="min-w-0 flex-1 truncate text-xs">
                                 {t.date.slice(8)}/{t.date.slice(5, 7)} · {t.merchant} ·{' '}
-                                <span className="font-mono">{formatBRLFromCents(t.amountCents)}</span>
+                                <span className="tabular-nums">{formatBRLFromCents(t.amountCents)}</span>
                               </span>
                               <select
                                 aria-label={`Categoria de ${t.merchant}`}
@@ -429,7 +422,7 @@ export function MonthPage() {
                               <span className="min-w-0 truncate">
                                 {t.date.slice(8)}/{t.date.slice(5, 7)} · {t.account ?? t.source} · {byId.get(t.id)?.description_raw}
                               </span>
-                              <span className="shrink-0 font-mono">{formatBRLFromCents(t.amountCents)}</span>
+                              <span className="shrink-0 tabular-nums">{formatBRLFromCents(t.amountCents)}</span>
                             </li>
                           ))}
                         </ul>
@@ -533,7 +526,7 @@ export function MonthPage() {
                       <span className="flex w-full items-center justify-between gap-2 text-sm">
                         <span className={cn('font-medium', !g.categoryId && 'text-warning')}>{g.name}</span>
                         <span className="flex items-center gap-2">
-                          <span className="font-mono tabular-nums">{formatBRLFromCents(g.totalCents)}</span>
+                          <span className="tabular-nums">{formatBRLFromCents(g.totalCents)}</span>
                           <ChevronDown className={cn('size-4 text-muted transition-transform', open && 'rotate-180')} aria-hidden="true" />
                         </span>
                       </span>
@@ -577,7 +570,7 @@ export function MonthPage() {
                                 </option>
                               ))}
                             </select>
-                            <span className={cn('w-20 shrink-0 text-right font-mono tabular-nums', t.kind === 'credit' && 'text-positive')}>
+                            <span className={cn('w-20 shrink-0 text-right tabular-nums', t.kind === 'credit' && 'text-positive')}>
                               {t.kind === 'credit' ? '−' : ''}
                               {formatBRLFromCents(t.amountCents)}
                             </span>
@@ -601,7 +594,7 @@ export function MonthPage() {
                 {result.byAccount.map((a) => (
                   <div key={a.account} className="flex justify-between gap-2">
                     <span>{a.account}</span>
-                    <span className="font-mono tabular-nums text-muted">
+                    <span className="tabular-nums text-muted">
                       {a.incomeCents ? <span className="text-positive">+{formatBRLFromCents(a.incomeCents)} </span> : null}
                       −{formatBRLFromCents(a.expenseCents)}
                     </span>
@@ -639,7 +632,7 @@ export function MonthPage() {
                             <span className="min-w-0 truncate">
                               {e.tx.date.slice(8)}/{e.tx.date.slice(5, 7)} · {e.tx.merchant} — <span className="text-muted">{e.note}</span>
                             </span>
-                            <span className="shrink-0 font-mono tabular-nums text-muted">{formatBRLFromCents(e.tx.amountCents)}</span>
+                            <span className="shrink-0 tabular-nums text-muted">{formatBRLFromCents(e.tx.amountCents)}</span>
                           </li>
                         ))}
                       </ul>

@@ -413,9 +413,9 @@ export function SavingsPage() {
           </Card>
 
           {loading ? (
-            <p className="text-muted">A carregar…</p>
+            <p className="text-muted">Carregando…</p>
           ) : goals.length === 0 ? (
-            <p className="text-sm text-muted">Ainda não há caixinhas. Cria uma acima.</p>
+            <p className="text-sm text-muted">Ainda não há caixinhas. Crie uma acima.</p>
           ) : (
             <ul className="space-y-3">
               {goals.map((g) => {
@@ -481,7 +481,7 @@ export function SavingsPage() {
       ) : (
         <div className="space-y-3">
           {loading ? (
-            <p className="text-muted">A carregar…</p>
+            <p className="text-muted">Carregando…</p>
           ) : entries.length === 0 ? (
             <p className="text-sm text-muted">Sem movimentos registados.</p>
           ) : (

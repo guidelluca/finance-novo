@@ -109,10 +109,10 @@ export function MonthBudgetCard({ userId, month, spentCents, incomeCents, pendin
         <CardContent className="flex flex-col items-start gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold">
-              Define um orçamento para {format(month, "MMMM 'de' yyyy", { locale: ptBR })}
+              Defina um orçamento para {format(month, "MMMM 'de' yyyy", { locale: ptBR })}
             </p>
             <p className="text-xs text-muted">
-              Vamos calcular quanto ainda podes gastar e o teu ritmo diário sugerido.
+              Vamos calcular quanto ainda dá para gastar e o ritmo diário sugerido.
             </p>
           </div>
           <div className="flex gap-2">

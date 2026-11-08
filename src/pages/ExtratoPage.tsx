@@ -1,9 +1,10 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { AlertCircle, ChevronLeft, ChevronRight, Plus, Search, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { AlertCircle, Plus, Search, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { MonthSwitcher } from '@/components/ui/month-switcher'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMonthData } from '@/hooks/useMonthData'
 import { usePeriods } from '@/hooks/usePeriods'
@@ -327,7 +328,6 @@ export function ExtratoPage() {
   const dupCount = cons.result.excluded.filter((e) => e.reason === 'duplicada').length
   const pending = uncategorized[0]
   const pendingSuggestion = pending ? suggestFor(pending) : null
-  const monthLabel = `${format(parseISO(`${month}-01`), "LLLL 'de' yyyy", { locale: ptBR })} · ${range.start.slice(8)}/${range.start.slice(5, 7)}–${range.end.slice(8)}/${range.end.slice(5, 7)}`
 
   const chips: { id: Chip; label: string }[] = [
     { id: 'all', label: 'Tudo' },
@@ -374,32 +374,31 @@ export function ExtratoPage() {
             <Link to="/transactions/avancado" aria-label="Modo avançado (IA, exportar)" title="Modo avançado (IA, exportar)" className="flex size-11 items-center justify-center rounded-[14px] border border-border bg-surface">
               <SlidersHorizontal className="size-5" strokeWidth={1.8} />
             </Link>
-            <button type="button" onClick={() => setAdding((a) => !a)} aria-label="Novo lançamento" className="flex size-11 items-center justify-center rounded-[14px] bg-primary text-primary-fg">
-              {adding ? <X className="size-5" /> : <Plus className="size-5" />}
+            <button
+              type="button"
+              onClick={() => setAdding((a) => !a)}
+              aria-expanded={adding}
+              className="flex h-11 items-center gap-1.5 rounded-[14px] bg-primary px-3.5 text-sm font-semibold text-primary-fg"
+            >
+              {adding ? <X className="size-4" /> : <Plus className="size-4" />}
+              {adding ? 'Fechar' : 'Lançar'}
             </button>
           </div>
         </div>
-        <div className="flex items-center justify-between rounded-2xl border border-border bg-surface px-1">
-          <button type="button" aria-label="Mês anterior" onClick={() => {
+        <MonthSwitcher
+          month={month}
+          range={range}
+          onChange={(d) => {
             setTouched(true)
-            setMonth((m) => shiftMonth(m, -1))
-          }} className="flex size-10 items-center justify-center text-muted">
-            <ChevronLeft className="size-5" />
-          </button>
-          <span className="text-sm font-semibold capitalize">{monthLabel}</span>
-          <button type="button" aria-label="Próximo mês" onClick={() => {
-            setTouched(true)
-            setMonth((m) => shiftMonth(m, 1))
-          }} className="flex size-10 items-center justify-center text-muted">
-            <ChevronRight className="size-5" />
-          </button>
-        </div>
+            setMonth((m) => shiftMonth(m, d))
+          }}
+        />
         <label className="flex h-12 items-center gap-2.5 rounded-2xl border border-border bg-surface px-3.5 text-muted">
           <Search className="size-[18px]" strokeWidth={1.8} aria-hidden />
           <span className="sr-only">Buscar transação</span>
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por descrição, valor ou categoria" className="flex-1 bg-transparent text-sm text-foreground outline-none" />
         </label>
-        <div className="flex flex-wrap gap-2">
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&>*]:shrink-0">
           {chips.map((c) => (
             <button
               key={c.id}

@@ -653,14 +653,14 @@ export function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Ir para o mês</CardTitle>
-            <p className="text-xs text-muted">Abre o dashboard só desse mês</p>
+            <p className="text-xs text-muted">Abre o painel só desse mês</p>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             {[...allMonthsSeries].reverse().map((m) => (
               <button
                 key={m.key}
                 type="button"
-                className="rounded-xl border border-border bg-surface-elevated/70 px-3 py-2 text-left text-xs capitalize transition hover:border-accent/40 sm:text-sm"
+                className="rounded-xl border border-border bg-surface-elevated/70 px-3 py-2 text-left text-xs first-letter:uppercase transition hover:border-accent/40 sm:text-sm"
                 onClick={() => goToMonthKey(m.key)}
               >
                 <span className="font-medium">{m.labelFull}</span>

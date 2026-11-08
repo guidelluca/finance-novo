@@ -255,9 +255,9 @@ export function FinanceAnalysisPage() {
 
       {tab === 'overview' ? (
         loadingSummary && summaryRows.length === 0 ? (
-          <p className="text-muted">A carregar…</p>
+          <p className="text-muted">Carregando…</p>
         ) : allMonthsSeries.length === 0 ? (
-          <p className="text-sm text-muted">Sem lançamentos. Importa ou cria movimentos no extrato.</p>
+          <p className="text-sm text-muted">Sem lançamentos. Importe um extrato ou lance à mão.</p>
         ) : (
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -347,7 +347,7 @@ export function FinanceAnalysisPage() {
                 })}
               </select>
             ) : (
-              <span className="text-sm capitalize">
+              <span className="text-sm first-letter:uppercase inline-block">
                 {format(month, 'MMMM yyyy', { locale: ptBR })}
               </span>
             )}
@@ -365,7 +365,7 @@ export function FinanceAnalysisPage() {
           </div>
 
           {loadingMonth && txs.length === 0 ? (
-            <p className="text-muted">A carregar mês…</p>
+            <p className="text-muted">Carregando o mês…</p>
           ) : (
             <>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

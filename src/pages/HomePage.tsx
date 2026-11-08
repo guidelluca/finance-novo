@@ -92,7 +92,10 @@ export function HomePage() {
   }, [history, month, refDay, today, periods])
   const delta = prevSoFar ? spentSoFar / prevSoFar - 1 : null
 
-  const recurring = useMemo(() => detectRecurring(month, monthTxs, history), [month, monthTxs, history])
+  const recurring = useMemo(
+    () => detectRecurring(month, monthTxs, history, (user?.user_metadata?.owner_name as string | undefined) ?? null),
+    [month, monthTxs, history, user],
+  )
   const upcoming = recurring
     .filter((r) => !r.paidThisMonth && (!isCurrent || r.day >= todayDay))
     .slice(0, 3)
@@ -134,7 +137,7 @@ export function HomePage() {
           <ChevronLeft className="size-5" />
         </button>
         <div className="min-w-[120px] text-center">
-          <p className="font-display text-xl font-semibold capitalize">{monthName}</p>
+          <p className="font-display text-xl font-semibold first-letter:uppercase">{monthName}</p>
           <p className="text-xs font-medium text-muted">
             {range.start.slice(8)}/{range.start.slice(5, 7)} – {range.end.slice(8)}/{range.end.slice(5, 7)}
           </p>
@@ -205,6 +208,39 @@ export function HomePage() {
         </div>
       </section>
 
+      {/* Fechamento do mês anterior */}
+      {!closing.loading && closingMissing.length > 0 ? (
+        <Link to="/fechamento" className="flex items-start gap-3.5 rounded-3xl border border-[#f6d3bb] bg-[#fff4ec] p-4 text-[#7c2d12] dark:border-[#5a3622] dark:bg-[#2a1d15] dark:text-[#ffd9c2]">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/80 text-[#9a3412] dark:bg-black/20 dark:text-[#ffb38a]">
+            <ClipboardCheck className="size-[18px]" strokeWidth={2} />
+          </span>
+          <span className="min-w-0 space-y-1">
+            <span className="block text-sm font-semibold leading-snug">
+              Fechamento de {format(parseISO(`${closingMonth}-01`), 'LLLL', { locale: ptBR })}: {closing.done} de {closing.total} contas completas
+            </span>
+            <span className="block text-[13px] leading-snug opacity-85">
+              Falta{closingMissing.length > 1 ? 'm' : ''}: {closingMissing.map((c) => c.account.name).join(', ')}. Toque para ver e importar.
+            </span>
+          </span>
+        </Link>
+      ) : null}
+
+      {/* Alerta inteligente */}
+      {insight ? (
+        <section className="flex items-start gap-3.5 rounded-3xl bg-[#e4ebfb] p-4 text-[#1a2a55] dark:bg-[#1c2a4a] dark:text-[#dfe7ff]">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#2f5bd3] text-white">
+            <Sparkles className="size-[18px]" strokeWidth={2} />
+          </span>
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-sm font-semibold leading-snug">{insight.title}</p>
+            <p className="text-[13px] leading-snug opacity-80">{insight.detail}</p>
+            <Link to="/mes" className="inline-flex min-h-9 items-center rounded-full bg-[#2f5bd3] px-3.5 text-[13px] font-semibold text-white">
+              Revisar no mês{result.issues.length > 1 ? ` (${result.issues.length})` : ''}
+            </Link>
+          </div>
+        </section>
+      ) : null}
+
       {/* Atalhos */}
       <div className="grid grid-cols-3 gap-2.5">
         <Link to="/import" className="flex flex-col items-center gap-2 rounded-[18px] border border-border bg-surface px-2.5 py-3.5 text-[13px] font-medium">
@@ -255,39 +291,6 @@ export function HomePage() {
         {!budgetRows.length && !topCats.length ? <p className="text-sm text-muted">Nenhum gasto neste mês ainda.</p> : null}
       </section>
 
-      {/* Fechamento do mês anterior */}
-      {!closing.loading && closingMissing.length > 0 ? (
-        <Link to="/fechamento" className="flex items-start gap-3.5 rounded-3xl border border-[#f6d3bb] bg-[#fff4ec] p-4 text-[#7c2d12] dark:border-[#5a3622] dark:bg-[#2a1d15] dark:text-[#ffd9c2]">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/80 text-[#9a3412] dark:bg-black/20 dark:text-[#ffb38a]">
-            <ClipboardCheck className="size-[18px]" strokeWidth={2} />
-          </span>
-          <span className="min-w-0 space-y-1">
-            <span className="block text-sm font-semibold leading-snug">
-              Fechamento de {format(parseISO(`${closingMonth}-01`), 'LLLL', { locale: ptBR })}: {closing.done} de {closing.total} contas completas
-            </span>
-            <span className="block text-[13px] leading-snug opacity-85">
-              Falta{closingMissing.length > 1 ? 'm' : ''}: {closingMissing.map((c) => c.account.name).join(', ')}. Toque para ver e importar.
-            </span>
-          </span>
-        </Link>
-      ) : null}
-
-      {/* Alerta inteligente */}
-      {insight ? (
-        <section className="flex items-start gap-3.5 rounded-3xl bg-[#e4ebfb] p-4 text-[#1a2a55] dark:bg-[#1c2a4a] dark:text-[#dfe7ff]">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#2f5bd3] text-white">
-            <Sparkles className="size-[18px]" strokeWidth={2} />
-          </span>
-          <div className="min-w-0 space-y-1.5">
-            <p className="text-sm font-semibold leading-snug">{insight.title}</p>
-            <p className="text-[13px] leading-snug opacity-80">{insight.detail}</p>
-            <Link to="/mes" className="inline-flex min-h-9 items-center rounded-full bg-[#2f5bd3] px-3.5 text-[13px] font-semibold text-white">
-              Revisar no mês{result.issues.length > 1 ? ` (${result.issues.length})` : ''}
-            </Link>
-          </div>
-        </section>
-      ) : null}
-
       {/* Próximas contas */}
       {upcoming.length ? (
         <section className="space-y-2.5">
@@ -305,6 +308,22 @@ export function HomePage() {
             ))}
           </div>
         </section>
+      ) : null}
+
+      {/* Painel com gráficos */}
+      {!loading ? (
+        <HomeDashboard
+          month={month}
+          result={result}
+          monthTxs={monthTxs}
+          history={history}
+          periods={periods}
+          range={range}
+          isCurrent={isCurrent}
+          refDay={refDay}
+          dismissed={dismissed}
+          today={today}
+        />
       ) : null}
 
       {/* Recentes */}
@@ -335,20 +354,6 @@ export function HomePage() {
         ))}
       </section>
 
-      {!loading ? (
-        <HomeDashboard
-          month={month}
-          result={result}
-          monthTxs={monthTxs}
-          history={history}
-          periods={periods}
-          range={range}
-          isCurrent={isCurrent}
-          refDay={refDay}
-          dismissed={dismissed}
-          today={today}
-        />
-      ) : null}
     </div>
   )
 }

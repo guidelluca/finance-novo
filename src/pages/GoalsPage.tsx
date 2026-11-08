@@ -184,7 +184,7 @@ export function GoalsPage() {
           <p className="font-display text-2xl font-bold">{brl0(totalSaved)}</p>
         </div>
         <div className="space-y-1 rounded-[20px] border border-border bg-surface px-4 py-3.5">
-          <p className="text-xs capitalize text-muted">Aportado em {format(new Date(), 'LLL', { locale: ptBR })}</p>
+          <p className="text-xs first-letter:uppercase text-muted">Aportado em {format(new Date(), 'LLL', { locale: ptBR })}</p>
           <p className="font-display text-2xl font-bold">{brl0(monthIn)}</p>
         </div>
       </section>

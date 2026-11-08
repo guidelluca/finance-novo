@@ -1,5 +1,4 @@
 import {
-  BarChart3,
   CalendarDays,
   ClipboardCheck,
   PieChart,
@@ -43,7 +42,6 @@ const primaryNav: NavItem[] = [
 const secondaryNav: NavItem[] = [
   { to: '/fechamento', icon: ClipboardCheck, label: 'Fechamento do mês' },
   { to: '/mes', icon: CalendarDays, label: 'Mês consolidado' },
-  { to: '/historico', icon: BarChart3, label: 'Visão geral' },
   { to: '/cards', icon: CreditCard, label: 'Cartões' },
   { to: '/analysis', icon: Sparkles, label: 'Análise IA' },
   { to: '/savings', icon: PiggyBank, label: 'Poupança' },
@@ -135,6 +133,20 @@ export function AppShell() {
                   </li>
                 ))}
               </ul>
+              <div className="border-t border-border p-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    closeMore()
+                    window.dispatchEvent(new Event('finance:open-ai'))
+                  }}
+                >
+                  <Sparkles className="size-4" />
+                  Perguntar à IA sobre seus gastos
+                </Button>
+              </div>
               <div className="flex gap-2 border-t border-border p-2">
                 <Button type="button" variant="ghost" className="flex-1 justify-start" onClick={toggle}>
                   {resolved === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}

@@ -55,13 +55,21 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-background px-4 py-10">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-background px-4 py-10">
+      <div className="flex flex-col items-center gap-2 text-center">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-ink font-display text-2xl font-bold text-lime" aria-hidden>
+          F
+        </span>
+        <p className="font-display text-2xl font-bold">Finance</p>
+        <p className="max-w-xs text-sm text-muted">Todas as suas contas num lugar só, sem repetir nada, com o mês fechado certinho.</p>
+      </div>
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>{mode === 'login' ? 'Entrar' : 'Criar conta'}</CardTitle>
           <CardDescription>
-            Conta à parte do login GitHub do site supabase.com. Crie uma conta na app com qualquer
-            e-mail e senha (mín. 6 caracteres), ou entre se já tiver criado.
+            {mode === 'login'
+              ? 'Use seu e-mail e senha ou a biometria do aparelho.'
+              : 'Escolha um e-mail e uma senha (mínimo 6 caracteres).'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
