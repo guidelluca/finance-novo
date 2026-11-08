@@ -122,7 +122,7 @@ export async function extractTransactionsFromImages(
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`
 
   const now = new Date()
-  const todayIso = now.toISOString().slice(0, 10)
+  const todayIso = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
   const currentYear = now.getFullYear()
 
   const parts: GeminiPart[] = []

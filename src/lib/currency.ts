@@ -11,48 +11,65 @@ export function formatBRLFromCents(cents: number): string {
  * Valor em CSV: aceita BR (1.234,56 ou 12,34) ou estilo planilha / Nubank (-75.98).
  */
 export function parseAmountToCentsForCsv(raw: string): number | null {
-  let s = raw.trim().replace(/^R\$\s*/i, '').replace(/\s/g, '')
-  if (!s) return null
-  const neg = s.startsWith('-') || s.endsWith('-')
-  s = s.replace(/^-/, '').replace(/-$/, '')
-  if (s.includes(',')) return parseBrazilianMoneyToCents((neg ? '-' : '') + s)
-  const dotParts = s.split('.')
-  if (dotParts.length === 2) {
-    const dec = dotParts[1] ?? ''
-    if (dec.length <= 2 && /^\d+$/.test(dec) && /^\d+$/.test(dotParts[0] ?? '')) {
-      const n = Number(s)
-      if (Number.isNaN(n)) return null
-      const cents = Math.round(Math.abs(n) * 100)
-      return neg ? -cents : cents
-    }
-  }
-  if (!s.includes('.')) {
-    const n = Number(s)
-    if (Number.isNaN(n)) return null
-    const cents = Math.round(Math.abs(n) * 100)
-    return neg ? -cents : cents
-  }
-  return parseBrazilianMoneyToCents((neg ? '-' : '') + s)
+  return parseMoneyToCents(raw)
 }
 
-export function parseBrazilianMoneyToCents(s: string): number | null {
-  let t = s.trim().replace(/\s/g, '').replace(/R\$/g, '')
+/**
+ * Número digitado ou impresso em formato brasileiro → centavos (com sinal).
+ * "1.234,56", "1.500" (milhar), "12,5", "45.90" (decimal com ponto), "R$ -10", "(45,90)" (negativo).
+ */
+export function parseMoneyToCents(raw: string): number | null {
+  let t = raw.trim().replace(/R\$/gi, '').replace(/\s/g, '')
   if (!t) return null
-  const neg = t.startsWith('-') || t.endsWith('-')
-  t = t.replace(/^-/, '').replace(/-$/, '')
-  const core = t
-  const normalized = core.replace(/\./g, '').replace(',', '.')
+  let neg = false
+  if (/^\(.*\)$/.test(t)) {
+    neg = true
+    t = t.slice(1, -1)
+  }
+  if (/^[-−]/.test(t) || /[-−]$/.test(t)) {
+    neg = true
+    t = t.replace(/^[-−]/, '').replace(/[-−]$/, '')
+  }
+  t = t.replace(/^\+/, '')
+  if (!/^[\d.,]+$/.test(t) || !/\d/.test(t)) return null
+  const lastComma = t.lastIndexOf(',')
+  const lastDot = t.lastIndexOf('.')
+  let normalized: string
+  if (lastComma >= 0 && lastDot >= 0) {
+    // o separador que vem por último é o decimal
+    normalized = lastComma > lastDot ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, '')
+  } else if (lastComma >= 0) {
+    normalized = t.replace(/\./g, '').replace(/,(?=.*,)/g, '').replace(',', '.')
+  } else if (lastDot >= 0) {
+    // "1.500" / "2.000.000" = milhar; "45.9" / "45.90" = decimal
+    normalized = /^\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, '') : t.replace(/\.(?=.*\.)/g, '')
+  } else normalized = t
   const n = Number(normalized)
-  if (Number.isNaN(n)) return null
+  if (!Number.isFinite(n)) return null
   const cents = Math.round(n * 100)
   return neg ? -cents : cents
 }
 
+export function parseBrazilianMoneyToCents(s: string): number | null {
+  return parseMoneyToCents(s)
+}
+
+function validIso(y: number, m: number, d: number): string | null {
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+/** "01/10/2026", "1/10/26", "01-10-2026", "2026-10-01" → ISO; datas impossíveis (31/02) → null. */
 export function parseBrazilianDate(d: string): string | null {
-  const m = d.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  const s = d.trim()
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/)
+  if (iso) return validIso(Number(iso[1]), Number(iso[2]), Number(iso[3]))
+  const m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?:[T\s,].*)?$/)
   if (!m) return null
-  const [, dd, mm, yyyy] = m
-  return `${yyyy}-${mm}-${dd}`
+  const y = m[3]!.length === 2 ? 2000 + Number(m[3]) : Number(m[3])
+  return validIso(y, Number(m[2]), Number(m[1]))
 }
 
 const MONTHS: Record<string, string> = {

@@ -103,9 +103,20 @@ export function useMonthData(month: string) {
     }
   }, [rows, parserByBatch, catName, month])
 
+  // alertas que o usuário dispensou no "Mês consolidado" também somem do Início e do Orçamento
+  const dismissed = useMemo(() => {
+    if (!user) return new Set<string>()
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`finance:dismissed:${user.id}`) ?? '[]') as string[])
+    } catch {
+      return new Set<string>()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, rows])
+
   const result = useMemo(
-    () => consolidateMonth(month, monthTxs, history, format(new Date(), 'yyyy-MM-dd')),
-    [month, monthTxs, history],
+    () => consolidateMonth(month, monthTxs, history, format(new Date(), 'yyyy-MM-dd'), dismissed),
+    [month, monthTxs, history, dismissed],
   )
 
   return { loading, error, categories, result, monthTxs, history, reload: load }

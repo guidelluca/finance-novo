@@ -158,6 +158,11 @@ function findClosingDate(text: string): string | null {
   return d.toISOString().slice(0, 10)
 }
 
+function localTodayIso(): string {
+  const d = new Date()
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
+}
+
 /** Fatura de cartão? (para a detecção automática do tipo de PDF) */
 export function looksLikeCreditCardInvoice(text: string): boolean {
   const t = text.slice(0, 20000)
@@ -172,7 +177,7 @@ export function parseFaturaCartao(pages: PdfPage[], todayIso?: string): FaturaPa
   const warnings: string[] = []
   const allText = pages.map((p) => itemsToLines(p.items).join('\n')).join('\n')
   const bank = detectBank(allText)
-  const closing = findClosingDate(allText) ?? todayIso ?? new Date().toISOString().slice(0, 10)
+  const closing = findClosingDate(allText) ?? todayIso ?? localTodayIso()
   const cy = Number(closing.slice(0, 4))
   const cm = Number(closing.slice(5, 7))
 

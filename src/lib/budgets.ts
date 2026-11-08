@@ -4,6 +4,7 @@
  * sincroniza entre aparelhos e não precisa de tabela nova.
  */
 import type { User } from '@supabase/supabase-js'
+import { parseMoneyToCents } from '@/lib/currency'
 import { supabase } from '@/lib/supabase'
 
 export type Budgets = {
@@ -54,9 +55,6 @@ export async function saveGoalDeadline(
 }
 
 export function parseBRLToCents(v: string): number | null {
-  const t = v.trim().replace(/R\$/gi, '').replace(/\s/g, '')
-  if (!t) return null
-  const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t)
-  if (!Number.isFinite(n) || n < 0) return null
-  return Math.round(n * 100)
+  const c = parseMoneyToCents(v)
+  return c == null || c < 0 ? null : c
 }

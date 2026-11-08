@@ -35,6 +35,7 @@ import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
 import { learnRules } from '@/lib/learnRules'
 import type { ParserId, TransactionDraft } from '@/parsers/types'
 import type { Category, ImportBatch, ImportFile, Rule } from '@/types/database'
+import { parseMoneyToCents } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { Link } from 'react-router-dom'
 
@@ -159,21 +160,45 @@ function enrichDrafts(
  * Prints e PDFs do mesmo período descrevem a mesma compra com textos diferentes,
  * então a dedup por texto não pega. Aqui: mesma data + valor + tipo já gravados → desmarca e avisa.
  */
+/** Busca paginada (o Supabase devolve no máximo 1000 linhas por consulta). */
+async function fetchTxRange<T>(userId: string, from: string, to: string, columns: string): Promise<T[]> {
+  const out: T[] = []
+  for (let i = 0; ; i += 1000) {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select(columns)
+      .eq('user_id', userId)
+      .gte('date', from)
+      .lte('date', to)
+      .order('id')
+      .range(i, i + 999)
+    if (error) throw error
+    out.push(...((data ?? []) as unknown as T[]))
+    if (!data || data.length < 1000) break
+  }
+  return out
+}
+
 async function flagPossibleDuplicates(userId: string, drafts: TransactionDraft[]): Promise<TransactionDraft[]> {
   if (drafts.length === 0) return drafts
   const dates = drafts.map((d) => d.date).sort()
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('date, amount_cents, kind, description_raw')
-    .eq('user_id', userId)
-    .gte('date', dates[0]!)
-    .lte('date', dates[dates.length - 1]!)
-  if (error || !data) return drafts
-  const existing = new Map<string, string>()
-  for (const t of data) existing.set(`${t.date}|${t.amount_cents}|${t.kind}`, t.description_raw)
+  type Row = { date: string; amount_cents: number; kind: string; description_raw: string }
+  let data: Row[]
+  try {
+    data = await fetchTxRange<Row>(userId, dates[0]!, dates[dates.length - 1]!, 'date, amount_cents, kind, description_raw')
+  } catch {
+    return drafts
+  }
+  // conta quantas já existem por data+valor+tipo: 2 Ubers iguais no arquivo e 1 salvo → só 1 é desmarcado
+  const existing = new Map<string, string[]>()
+  for (const t of data) {
+    const k = `${t.date}|${t.amount_cents}|${t.kind}`
+    existing.set(k, [...(existing.get(k) ?? []), t.description_raw])
+  }
   return drafts.map((d) => {
-    const hit = existing.get(`${d.date}|${d.amountCents}|${d.kind}`)
-    if (!hit) return d
+    const list = existing.get(`${d.date}|${d.amountCents}|${d.kind}`)
+    const hit = list?.shift()
+    if (hit === undefined) return d
     return { ...d, excluded: true, reviewFlags: [...(d.reviewFlags ?? []), `já existe: “${hit.slice(0, 40)}”`] }
   })
 }
@@ -183,11 +208,8 @@ function centsToInput(cents: number): string {
 }
 
 function inputToCents(v: string): number | null {
-  const t = v.trim().replace(/R\$/gi, '').replace(/\s/g, '').replace(/^[+-]/, '')
-  if (!t) return null
-  const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t)
-  if (!Number.isFinite(n) || n <= 0) return null
-  return Math.round(n * 100)
+  const c = parseMoneyToCents(v.trim().replace(/^[+-]/, ''))
+  return c == null || c <= 0 ? null : c
 }
 
 interface ShotItem {
@@ -491,7 +513,7 @@ export function ImportPage() {
       }
 
       const withRules = enrichDrafts(
-        result.drafts,
+        await flagPossibleDuplicates(user.id, result.drafts),
         ruleRows.filter((x) => x.enabled),
         categoryRowsResolved,
         { hintFirst: true },
@@ -518,6 +540,8 @@ export function ImportPage() {
     const currentFilename = file?.name ?? shotSourceName ?? `import-${format(new Date(), 'yyyyMMdd-HHmm')}`
     if (!file && !shotSourceName) return
     setBusy(true)
+    let createdBatchId: string | null = null
+    let inserted = false
     try {
       const parserId = lastParserId
       const defaultAccount = accountLabelFromImport(parserId, currentFilename)
@@ -533,6 +557,7 @@ export function ImportPage() {
         .select('id')
         .single()
       if (bErr) throw bErr
+      createdBatchId = batch!.id
 
       const { data: fileRow, error: fErr } = await supabase
         .from('import_files')
@@ -612,21 +637,27 @@ export function ImportPage() {
       )
 
       const candidateKeys = [...new Set(prepared.flatMap((p) => p.candidates))]
-      const { data: existingRows } = await supabase
-        .from('transactions')
-        .select('dedup_key')
-        .eq('user_id', user.id)
-        .in('dedup_key', candidateKeys)
-      const existing = new Set((existingRows ?? []).map((r) => r.dedup_key))
+      // em lotes: uma fatura grande gera centenas de chaves e a URL da consulta passaria do limite
+      const existing = new Set<string | null>()
+      for (let i = 0; i < candidateKeys.length; i += 80) {
+        const { data: existingRows, error: kErr } = await supabase
+          .from('transactions')
+          .select('dedup_key')
+          .eq('user_id', user.id)
+          .in('dedup_key', candidateKeys.slice(i, i + 80))
+        if (kErr) throw kErr
+        for (const r of existingRows ?? []) existing.add(r.dedup_key)
+      }
 
       const minDate = toSave.reduce((a, d) => (d.date < a ? d.date : a), toSave[0]!.date)
       const maxDate = toSave.reduce((a, d) => (d.date > a ? d.date : a), toSave[0]!.date)
-      const { data: existingInRange } = await supabase
-        .from('transactions')
-        .select('date, amount_cents, kind, description_normalized, description_raw')
-        .eq('user_id', user.id)
-        .gte('date', minDate)
-        .lte('date', maxDate)
+      const existingInRange = await fetchTxRange<{
+        date: string
+        amount_cents: number
+        kind: string
+        description_normalized: string | null
+        description_raw: string
+      }>(user.id, minDate, maxDate, 'date, amount_cents, kind, description_normalized, description_raw')
 
       const existingFp = new Set(
         (existingInRange ?? []).map((t) =>
@@ -664,6 +695,7 @@ export function ImportPage() {
         ignoreDuplicates: true,
       })
       if (tErr) throw tErr
+      inserted = true
 
       const learned = learnFromCorrections
         ? await learnRules(
@@ -694,7 +726,12 @@ export function ImportPage() {
       setShotHint('')
       void loadImports()
     } catch (e) {
-      setWarnings([(e as Error).message])
+      // nada foi gravado: apaga o registro de importação vazio para não poluir o histórico
+      if (createdBatchId && !inserted) {
+        await supabase.from('import_files').delete().eq('batch_id', createdBatchId)
+        await supabase.from('import_batches').delete().eq('id', createdBatchId)
+      }
+      setWarnings([`Não foi possível salvar: ${(e as Error).message}`])
     } finally {
       setBusy(false)
     }

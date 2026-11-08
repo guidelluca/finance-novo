@@ -5,12 +5,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
+import { useMonthData } from '@/hooks/useMonthData'
 import { parseBRLToCents } from '@/lib/budgets'
 import { formatBRLFromCents } from '@/lib/currency'
 import { normalizeTransactionLogicalDescription, transactionDedupCandidates } from '@/lib/dedupKey'
 import { learnRules } from '@/lib/learnRules'
 import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
-import { shiftMonth } from '@/lib/monthConsolidation'
+import { shiftMonth, type ExcludedReason } from '@/lib/monthConsolidation'
 import { suggestCategoryId } from '@/lib/rulesEngine'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -19,6 +20,13 @@ import type { Category, Rule, Transaction } from '@/types/database'
 
 type Chip = 'all' | 'out' | 'in' | 'none'
 type Form = { date: string; description: string; amount: string; kind: 'debit' | 'credit'; categoryId: string; account: string }
+
+const EXCLUDED_LABEL: Record<ExcludedReason, string> = {
+  duplicada: 'repetida — não conta',
+  pagamento_fatura: 'pagamento de fatura — não conta',
+  transferencia_interna: 'entre suas contas — não conta',
+  investimento: 'aplicação — não conta',
+}
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 
@@ -39,7 +47,10 @@ export function ExtratoPage() {
     const k = params.get('kind')
     return k === 'credit' ? 'in' : k === 'debit' ? 'out' : params.get('category') === 'none' ? 'none' : 'all'
   })
-  const [q, setQ] = useState('')
+  const [q, setQ] = useState(() => {
+    const c = params.get('category')
+    return c && c !== 'none' ? c : ''
+  })
   const [txs, setTxs] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [rules, setRules] = useState<Rule[]>([])
@@ -53,6 +64,9 @@ export function ExtratoPage() {
   const [newForm, setNewForm] = useState<Form>({ date: today, description: '', amount: '', kind: 'debit', categoryId: '', account: '' })
   const [learn, setLearn] = useState(true)
   const [busy, setBusy] = useState(false)
+
+  const cons = useMonthData(month)
+  const excludedById = useMemo(() => new Map(cons.result.excluded.map((e) => [e.tx.id, e])), [cons.result])
 
   const load = useCallback(async () => {
     if (!user) return
@@ -71,6 +85,12 @@ export function ExtratoPage() {
     setLoading(false)
   }, [user, month])
 
+  const consReload = cons.reload
+  const reloadAll = useCallback(() => {
+    void load()
+    void consReload()
+  }, [load, consReload])
+
   useEffect(() => {
     void load()
   }, [load])
@@ -86,21 +106,29 @@ export function ExtratoPage() {
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
   const merchantOf = useCallback((t: Transaction) => identifyMerchant(t.description_raw).name, [])
 
-  const income = txs.filter((t) => t.kind === 'credit').reduce((s, t) => s + t.amount_cents, 0)
-  const expense = txs.filter((t) => t.kind === 'debit').reduce((s, t) => s + t.amount_cents, 0)
-  const uncategorized = txs.filter((t) => !t.category_id && t.kind === 'debit')
+  // totais sem repetição: pagamento de fatura, transferências entre contas e duplicadas não contam
+  const counts = (t: Transaction) => !excludedById.has(t.id)
+  const consReady = !cons.loading && !cons.error
+  const income = consReady
+    ? cons.result.totals.incomeCents
+    : txs.filter((t) => t.kind === 'credit').reduce((s, t) => s + t.amount_cents, 0)
+  const expense = consReady
+    ? cons.result.totals.expenseCents
+    : txs.filter((t) => t.kind === 'debit').reduce((s, t) => s + t.amount_cents, 0)
+  const uncategorized = txs.filter((t) => !t.category_id && t.kind === 'debit' && counts(t))
 
   const filtered = useMemo(() => {
     const nq = norm(q.trim())
     return txs.filter((t) => {
       if (chip === 'out' && t.kind !== 'debit') return false
       if (chip === 'in' && t.kind !== 'credit') return false
-      if (chip === 'none' && t.category_id) return false
+      if (chip === 'none' && (t.category_id || t.kind !== 'debit' || !counts(t))) return false
       if (!nq) return true
       const hay = norm(`${merchantOf(t)} ${t.description_raw} ${catName.get(t.category_id ?? '') ?? ''} ${t.account ?? ''} ${(t.amount_cents / 100).toFixed(2).replace('.', ',')}`)
       return hay.includes(nq)
     })
-  }, [txs, chip, q, catName, merchantOf])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txs, chip, q, catName, merchantOf, excludedById])
 
   const days = useMemo(() => {
     const m = new Map<string, Transaction[]>()
@@ -177,7 +205,7 @@ export function ExtratoPage() {
     }
     setOpenId(null)
     setNotice('Lançamento atualizado.')
-    void load()
+    reloadAll()
   }
 
   const remove = async (t: Transaction) => {
@@ -186,6 +214,7 @@ export function ExtratoPage() {
     else {
       setTxs((l) => l.filter((x) => x.id !== t.id))
       setOpenId(null)
+      void consReload()
       setNotice('Lançamento apagado.')
     }
   }
@@ -236,7 +265,7 @@ export function ExtratoPage() {
     setAdding(false)
     setNewForm({ date: today, description: '', amount: '', kind: 'debit', categoryId: '', account: '' })
     if (!newForm.date.startsWith(month)) setMonth(newForm.date.slice(0, 7))
-    else void load()
+    else reloadAll()
   }
 
   const pending = uncategorized[0]
@@ -407,7 +436,7 @@ export function ExtratoPage() {
       ) : null}
 
       {days.map(([day, list]) => {
-        const net = list.reduce((s, t) => s + (t.kind === 'credit' ? t.amount_cents : -t.amount_cents), 0)
+        const net = list.filter(counts).reduce((s, t) => s + (t.kind === 'credit' ? t.amount_cents : -t.amount_cents), 0)
         return (
           <section key={day} className="space-y-2">
             <div className="flex justify-between px-1.5 text-[13px] text-muted">
@@ -421,6 +450,7 @@ export function ExtratoPage() {
               {list.map((t, i) => {
                 const cat = catName.get(t.category_id ?? '') ?? null
                 const open = openId === t.id
+                const ex = excludedById.get(t.id)
                 return (
                   <div key={t.id} className={cn(i > 0 && 'border-t border-[#eeefe9] dark:border-[#2b2e34]')}>
                     <button type="button" onClick={() => openRow(t)} aria-expanded={open} className="flex w-full items-center gap-3 px-2.5 py-2.5 text-left">
@@ -429,12 +459,18 @@ export function ExtratoPage() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{merchantOf(t)}</span>
-                        <span className={cn('block truncate text-xs', cat ? 'text-muted' : 'text-warning')}>
-                          {cat ?? 'Sem categoria'}
+                        <span className={cn('block truncate text-xs', cat || ex ? 'text-muted' : 'text-warning')}>
+                          {ex ? EXCLUDED_LABEL[ex.reason] : (cat ?? 'Sem categoria')}
                           {t.account ? ` · ${t.account}` : ''}
                         </span>
                       </span>
-                      <span className={cn('shrink-0 text-sm font-semibold tabular-nums', t.kind === 'credit' && 'text-positive')}>
+                      <span
+                        className={cn(
+                          'shrink-0 text-sm font-semibold tabular-nums',
+                          t.kind === 'credit' && !ex && 'text-positive',
+                          ex && 'text-muted line-through',
+                        )}
+                      >
                         {t.kind === 'credit' ? '+' : '−'}
                         {formatBRLFromCents(t.amount_cents)}
                       </span>
@@ -442,6 +478,7 @@ export function ExtratoPage() {
                     {open && edit ? (
                       <div className="space-y-3 px-2.5 pb-3">
                         <p className="truncate font-mono text-[11px] text-muted">{t.description_raw}</p>
+                        {ex ? <p className="text-xs text-muted">{ex.note}</p> : null}
                         {formFields(edit, setEdit)}
                         <div className="flex flex-wrap gap-2">
                           <Button size="sm" onClick={() => void saveEdit(t)} disabled={busy}>
