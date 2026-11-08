@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuth } from '@/contexts/AuthContext'
 import { formatBRLFromCents } from '@/lib/currency'
 import { learnRules } from '@/lib/learnRules'
-import { identifyMerchant } from '@/lib/merchantIdentify'
+import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
 import {
   consolidateMonth,
   shiftMonth,
@@ -48,6 +48,7 @@ const REASON_LABEL: Record<string, string> = {
   pagamento_fatura: 'Pagamento de fatura do cartão',
   transferencia_interna: 'Transferências entre suas contas',
   investimento: 'Aplicações e resgates',
+  estorno: 'Estornos (cobrança e devolução)',
 }
 
 function loadDismissed(userId: string): Set<string> {
@@ -339,6 +340,32 @@ export function MonthPage() {
                         </div>
                       </div>
 
+                      {issue.type === 'categoria_suspeita' ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          {(() => {
+                            const sugg = pickCategoryId(issue.suggestNames ?? [], categories)
+                            return sugg ? (
+                              <Button size="sm" onClick={() => void Promise.all(txs.map((t) => setCategory(t, sugg)))}>
+                                Mudar para {catName.get(sugg)}
+                              </Button>
+                            ) : null
+                          })()}
+                          <select
+                            aria-label="Escolher outra categoria"
+                            value=""
+                            onChange={(e) => e.target.value && void Promise.all(txs.map((t) => setCategory(t, e.target.value)))}
+                            className="h-9 rounded-lg border border-border bg-background px-2 text-sm"
+                          >
+                            <option value="">Outra categoria…</option>
+                            {categories.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
+
                       {issue.type === 'sem_categoria' ? (
                         <ul className="mt-2 space-y-1.5">
                           {txs.map((t) => (
@@ -392,6 +419,11 @@ export function MonthPage() {
                             Apagar uma
                           </Button>
                         ) : null}
+                        {issue.type === 'estorno' ? (
+                          <Button size="sm" variant="ghost" onClick={() => dismiss(issue)}>
+                            Não é estorno — contar os dois
+                          </Button>
+                        ) : null}
                         {issue.type === 'transferencia_interna' ? (
                           <Button size="sm" variant="ghost" onClick={() => dismiss(issue)}>
                             Não, foi para outra pessoa
@@ -402,7 +434,7 @@ export function MonthPage() {
                             <Link to="/import">Importar</Link>
                           </Button>
                         ) : null}
-                        {issue.type !== 'sem_categoria' && issue.type !== 'duplicada' && issue.type !== 'transferencia_interna' ? (
+                        {issue.type !== 'sem_categoria' && issue.type !== 'duplicada' && issue.type !== 'transferencia_interna' && issue.type !== 'estorno' ? (
                           <Button size="sm" variant="ghost" onClick={() => dismiss(issue)}>
                             <EyeOff className="size-4" /> Está certo
                           </Button>

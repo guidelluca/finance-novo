@@ -26,6 +26,7 @@ const EXCLUDED_LABEL: Record<ExcludedReason, string> = {
   pagamento_fatura: 'pagamento de fatura — não conta',
   transferencia_interna: 'entre suas contas — não conta',
   investimento: 'aplicação — não conta',
+  estorno: 'estornado — não conta',
 }
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
@@ -45,6 +46,7 @@ export function ExtratoPage() {
   const [month, setMonth] = useState(() => params.get('month') ?? today.slice(0, 7))
   const [chip, setChip] = useState<Chip>(() => {
     const k = params.get('kind')
+    if (params.get('filtro') === 'dup') return 'dup'
     return k === 'credit' ? 'in' : k === 'debit' ? 'out' : params.get('category') === 'none' ? 'none' : 'all'
   })
   const [q, setQ] = useState(() => {

@@ -1,6 +1,6 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, ImagePlus, Sparkles, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -38,7 +38,8 @@ import type { ParserId, TransactionDraft } from '@/parsers/types'
 import type { Category, ImportBatch, ImportFile, Rule } from '@/types/database'
 import { parseMoneyToCents } from '@/lib/currency'
 import { cn } from '@/lib/utils'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { matchAccount, readAccounts } from '@/lib/accounts'
 
 const PARSER_OPTIONS: { id: ParserId; label: string }[] = [
   { id: 'screenshot_ai_v1', label: 'Print / Foto — extraído por IA' },
@@ -278,6 +279,10 @@ export function ImportPage() {
   const [shots, setShots] = useState<ShotItem[]>([])
   const [shotHint, setShotHint] = useState('')
   const [shotSourceName, setShotSourceName] = useState<string | null>(null)
+  const [searchParams] = useSearchParams()
+  const trackedAccounts = useMemo(() => readAccounts(user), [user])
+  /** conta escolhida na revisão (null = palpite automático) */
+  const [pickedAccountId, setPickedAccountId] = useState<string | null>(() => searchParams.get('account'))
   const [shotError, setShotError] = useState<string | null>(null)
   const shotInputRef = useRef<HTMLInputElement | null>(null)
   const shotCameraRef = useRef<HTMLInputElement | null>(null)
@@ -630,6 +635,13 @@ export function ImportPage() {
     setDrafts((d) => d.map((x) => (x.tempId === tempId ? { ...x, ...patch } : x)))
   }
 
+  const guessedAccount = useMemo(() => {
+    const hint = drafts.find((d) => d.accountHint)?.accountHint
+    const label = hint ?? accountLabelFromImport(lastParserId, file?.name ?? shotSourceName ?? '')
+    return matchAccount(trackedAccounts, label, drafts.some((d) => d.cardLast4))
+  }, [drafts, lastParserId, file, shotSourceName, trackedAccounts])
+  const targetAccount = trackedAccounts.find((a) => a.id === pickedAccountId) ?? guessedAccount
+
   const saveAll = async () => {
     const toSave = drafts.filter((d) => !d.excluded)
     if (!user || toSave.length === 0) return
@@ -700,7 +712,7 @@ export function ImportPage() {
       const prepared = await Promise.all(
         toSave.map(async (d, i) => {
           const descKey = descKeys[i]!
-          const account = d.accountHint?.trim() || defaultAccount
+          const account = targetAccount?.name ?? (d.accountHint?.trim() || defaultAccount)
           const candidates = await transactionDedupCandidates(
             user.id,
             d.date,
@@ -841,6 +853,7 @@ export function ImportPage() {
       setDetectedBank(null)
 
       setStep('pick')
+      setPickedAccountId(null)
       setFile(null)
       setDrafts([])
       setShotSourceName(null)
@@ -1252,6 +1265,25 @@ export function ImportPage() {
                 {drafts.filter((d) => !d.excluded).length} de {drafts.length} lançamentos marcados
                 {detectedBank ? ` · ${detectedBank}` : ''}
               </CardDescription>
+              <label className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium">De qual conta é?</span>
+                <select
+                  value={targetAccount?.id ?? ''}
+                  onChange={(e) => setPickedAccountId(e.target.value || null)}
+                  className={cn(
+                    'h-9 rounded-lg border bg-background px-2 text-sm',
+                    targetAccount ? 'border-border' : 'border-warning',
+                  )}
+                >
+                  <option value="">Escolher…</option>
+                  {trackedAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+                {!targetAccount ? <span className="text-xs text-warning">escolha para o fechamento do mês saber</span> : null}
+              </label>
             </div>
             <div className="flex gap-2">
               <Button type="button" variant="secondary" onClick={() => setStep('pick')}>

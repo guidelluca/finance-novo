@@ -1,9 +1,10 @@
 import { format, getDaysInMonth, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Plus, Sparkles, Upload } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ClipboardCheck, Plus, Sparkles, Upload } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { useCoverage } from '@/hooks/useCoverage'
 import { useMonthData } from '@/hooks/useMonthData'
 import { effectiveTotal, readBudgets } from '@/lib/budgets'
 import { formatBRLFromCents } from '@/lib/currency'
@@ -45,6 +46,10 @@ export function HomePage() {
   const { user } = useAuth()
   const today = format(new Date(), 'yyyy-MM-dd')
   const [month, setMonth] = useState(() => today.slice(0, 7))
+  // fechamento do mês anterior: avisa até todos os extratos estarem importados
+  const closingMonth = shiftMonth(today.slice(0, 7), -1)
+  const closing = useCoverage(closingMonth)
+  const closingMissing = closing.coverage.filter((c) => c.status === 'falta' || c.status === 'parcial')
   const { loading, error, result, monthTxs, history } = useMonthData(month)
   const budgets = readBudgets(user)
 
@@ -228,6 +233,23 @@ export function HomePage() {
         })}
         {!budgetRows.length && !topCats.length ? <p className="text-sm text-muted">Nenhum gasto neste mês ainda.</p> : null}
       </section>
+
+      {/* Fechamento do mês anterior */}
+      {!closing.loading && closingMissing.length > 0 ? (
+        <Link to="/fechamento" className="flex items-start gap-3.5 rounded-3xl border border-[#f6d3bb] bg-[#fff4ec] p-4 text-[#7c2d12] dark:border-[#5a3622] dark:bg-[#2a1d15] dark:text-[#ffd9c2]">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/80 text-[#9a3412] dark:bg-black/20 dark:text-[#ffb38a]">
+            <ClipboardCheck className="size-[18px]" strokeWidth={2} />
+          </span>
+          <span className="min-w-0 space-y-1">
+            <span className="block text-sm font-semibold leading-snug">
+              Fechamento de {format(parseISO(`${closingMonth}-01`), 'LLLL', { locale: ptBR })}: {closing.done} de {closing.total} contas completas
+            </span>
+            <span className="block text-[13px] leading-snug opacity-85">
+              Falta{closingMissing.length > 1 ? 'm' : ''}: {closingMissing.map((c) => c.account.name).join(', ')}. Toque para ver e importar.
+            </span>
+          </span>
+        </Link>
+      ) : null}
 
       {/* Alerta inteligente */}
       {insight ? (

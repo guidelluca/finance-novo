@@ -26,9 +26,16 @@ export type ConsTx = {
   cardId?: string | null
 }
 
-export type ConsItem = ConsTx & { merchant: string; merchantKey: string; merchantKind: string | null }
+export type ConsItem = ConsTx & {
+  merchant: string
+  merchantKey: string
+  merchantKind: string | null
+  /** categorias que o estabelecimento costuma ter (dicionário local) */
+  expectedCategories: string[]
+  ruleKey: string | null
+}
 
-export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento'
+export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento' | 'estorno'
 
 export type Excluded = { tx: ConsItem; reason: ExcludedReason; relatedId?: string; note: string }
 
@@ -45,6 +52,8 @@ export type IssueType =
   | 'conta_sem_lancamentos'
   | 'categoria_acima'
   | 'transferencia_interna'
+  | 'estorno'
+  | 'categoria_suspeita'
 
 export type Severity = 'alta' | 'media' | 'baixa'
 
@@ -56,6 +65,8 @@ export type Issue = {
   title: string
   detail: string
   txIds: string[]
+  /** categoria_suspeita: nomes de categoria que fariam sentido (a tela escolhe a do usuário) */
+  suggestNames?: string[]
 }
 
 export type CategoryGroup = {
@@ -128,7 +139,16 @@ function keyOf(name: string): string {
 function enrich(t: ConsTx): ConsItem {
   const m = identifyMerchant(t.description)
   const name = t.merchantName?.trim() || m.name
-  return { ...t, merchant: name, merchantKey: keyOf(name), merchantKind: m.kind }
+  // categorias vindas só do tipo de operação (Pix/TED para pessoa) não dizem nada do gasto
+  const opOnly = m.categories.every((c) => c === 'Pix' || c === 'Transferências')
+  return {
+    ...t,
+    merchant: name,
+    merchantKey: keyOf(name),
+    merchantKind: m.kind,
+    expectedCategories: opOnly ? [] : m.categories,
+    ruleKey: m.ruleKey,
+  }
 }
 
 function isCard(t: { account: string | null; cardId?: string | null }): boolean {
@@ -315,6 +335,40 @@ export function consolidateMonth(
     excluded.get(mirror.id)!.relatedId = t.id
   }
 
+  // 4c) Estorno: compra/corrida cancelada e o dinheiro devolvido logo depois → as duas saem da soma
+  const REFUND_HINT = /estorno|estornad|cancel|reembols|devolu|chargeback/i
+  const debitsLive = items.filter((t) => t.kind === 'debit' && !excluded.has(t.id))
+  for (const c of items) {
+    if (c.kind !== 'credit' || excluded.has(c.id)) continue
+    const ride = APP_RIDE.test(c.merchant + ' ' + c.description)
+    const hinted = REFUND_HINT.test(c.description)
+    const d = debitsLive
+      .filter(
+        (x) =>
+          !excluded.has(x.id) &&
+          x.amountCents === c.amountCents &&
+          x.date <= c.date &&
+          dayDiff(x.date, c.date) <= (ride ? 3 : 10) &&
+          (x.account === c.account || (isCard(x) && isCard(c))) &&
+          (similarMerchant(x, c) || (ride && APP_RIDE.test(x.merchant + ' ' + x.description)) || hinted),
+      )
+      .sort((a, b) => dayDiff(a.date, c.date) - dayDiff(b.date, c.date))[0]
+    if (!d) continue
+    const id = issueId('estorno', [d.id, c.id])
+    if (dismissed.has(id)) continue
+    const label = ride ? 'Corrida cancelada e estornada' : 'Compra estornada'
+    exclude(d, 'estorno', `${label}: o valor voltou em ${c.date.slice(8)}/${c.date.slice(5, 7)}`, c.id)
+    exclude(c, 'estorno', `${label}: devolução da cobrança de ${d.date.slice(8)}/${d.date.slice(5, 7)}`, d.id)
+    issues.push({
+      id,
+      type: 'estorno',
+      severity: 'baixa',
+      title: `${label}: ${d.merchant} · ${brl(d.amountCents)}`,
+      detail: 'Cobrança e devolução do mesmo valor. Tirei as duas de entradas e saídas. Se não for estorno, toque em "Não é estorno".',
+      txIds: [d.id, c.id],
+    })
+  }
+
   const included = items.filter((t) => !excluded.has(t.id))
   const expenses = included.filter((t) => t.kind === 'debit')
   const incomes = included.filter((t) => t.kind === 'credit')
@@ -458,6 +512,38 @@ export function consolidateMonth(
         txIds: [],
       })
     }
+  }
+
+  // 9b) Categoria que não combina com o estabelecimento (ex.: Mercado Livre em "VR", Posto em "Restaurantes")
+  const foldCat = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+  const catFits = (cat: string, expected: string[]) => {
+    const c = foldCat(cat)
+    return expected.some((e) => {
+      const f = foldCat(e)
+      return c.includes(f) || f.includes(c)
+    })
+  }
+  const suspicious = new Map<string, ConsItem[]>()
+  for (const t of items) {
+    if (excluded.has(t.id) || !t.categoryId || !t.categoryName || t.expectedCategories.length === 0) continue
+    if (catFits(t.categoryName, t.expectedCategories)) continue
+    const k = `${t.ruleKey ?? t.merchantKey}:${t.categoryId}`
+    suspicious.set(k, [...(suspicious.get(k) ?? []), t])
+  }
+  for (const [k, group] of suspicious) {
+    const t = group[0]!
+    // sem o mês no id: "está certo" vale para sempre para esse estabelecimento + categoria
+    const id = issueId('categoria_suspeita', [], k)
+    if (dismissed.has(id)) continue
+    issues.push({
+      id,
+      type: 'categoria_suspeita',
+      severity: 'baixa',
+      title: `${t.merchant} em “${t.categoryName}”?`,
+      detail: `${group.length > 1 ? `${group.length} lançamentos` : 'Esse lançamento'} de ${t.merchant} ${group.length > 1 ? 'estão' : 'está'} em “${t.categoryName}”, mas costuma ser ${t.expectedCategories.slice(0, 2).join(' ou ')}. Mude ou confirme que está certo.`,
+      txIds: group.map((g) => g.id),
+      suggestNames: t.expectedCategories,
+    })
   }
 
   // 10) Sem categoria

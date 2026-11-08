@@ -1,6 +1,7 @@
 import {
   BarChart3,
   CalendarDays,
+  ClipboardCheck,
   PieChart,
   Target,
   Fingerprint,
@@ -40,6 +41,7 @@ const primaryNav: NavItem[] = [
 
 /** Menu do avatar (topo) */
 const secondaryNav: NavItem[] = [
+  { to: '/fechamento', icon: ClipboardCheck, label: 'Fechamento do mês' },
   { to: '/mes', icon: CalendarDays, label: 'Mês consolidado' },
   { to: '/historico', icon: BarChart3, label: 'Visão geral' },
   { to: '/cards', icon: CreditCard, label: 'Cartões' },
