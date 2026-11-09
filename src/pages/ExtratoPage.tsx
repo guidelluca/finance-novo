@@ -527,6 +527,21 @@ export function ExtratoPage() {
         </section>
       ) : null}
 
+      {cons.result.plannedRent && (chip === 'all' || chip === 'out') && !q ? (
+        <Link
+          to="/casa"
+          className="flex items-center gap-3 rounded-[22px] border border-dashed border-border bg-surface px-4 py-3"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium">Aluguel {cons.result.plannedRent.label} · previsto</span>
+            <span className="block text-xs text-muted">
+              Da planilha: aluguel {formatBRLFromCents(cons.result.plannedRent.aluguelCents)} + caixinha{' '}
+              {formatBRLFromCents(cons.result.plannedRent.caixinhaCents)}. Já conta nas saídas; vira o pagamento real quando ele entrar no extrato.
+            </span>
+          </span>
+          <span className="shrink-0 text-sm font-semibold tabular-nums">−{formatBRLFromCents(cons.result.plannedRent.cents)}</span>
+        </Link>
+      ) : null}
       {loading ? <p className="text-sm text-muted">Carregando…</p> : null}
       {!loading && days.length === 0 ? (
         <p className="rounded-3xl border border-dashed border-border p-6 text-center text-sm text-muted">

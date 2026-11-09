@@ -96,6 +96,19 @@ export type ConsolidatedMonth = {
   issues: Issue[]
   /** aluguel pago à imobiliária: só a sua parte (total − o que os moradores mandaram) conta como gasto seu */
   rentShares: RentShare[]
+  /** aluguel do mês tirado da planilha, ainda sem pagamento no extrato (já conta nos gastos) */
+  plannedRent: PlannedRent | null
+}
+
+export type PlannedRent = {
+  /** id do lançamento previsto (não existe no banco de dados) */
+  id: string
+  tab: string
+  label: string
+  nome: string
+  aluguelCents: number
+  caixinhaCents: number
+  cents: number
 }
 
 export type RentShare = {
@@ -371,6 +384,37 @@ export function consolidateMonth(
         const idx = items.indexOf(pay)
         items[idx] = { ...pay, amountCents: shareCents }
       }
+    }
+  }
+
+  // 0d) Aluguel do mês ainda não pago (pago entre 10 e 15): com a planilha lida, o seu aluguel
+  //     (Aluguel + Caixinha da sua linha) já entra no mês como "previsto". Some quando o pagamento
+  //     à imobiliária aparecer no extrato (aí vale o 0c).
+  let plannedRent: PlannedRent | null = null
+  if (house?.sheets) {
+    const tab = sheetTabForPayment(`${month}-15`)
+    const sheet = house.sheets[tab]
+    const me = sheet ? selfResident(sheet.residents, house, ownerName) : null
+    const cents = me ? me.aluguelCents + me.caixinhaCents : 0
+    if (sheet && me && cents > 0 && !rentShares.some((r) => r.sheetTab === tab)) {
+      // usa a sua categoria de aluguel/moradia, se já existir em algum lançamento
+      const cat = [...items, ...hist].find((t) => t.categoryId && t.categoryName && /aluguel|moradia|casa/i.test(t.categoryName))
+      const id = `previsto:aluguel:${tab}`
+      items.push(
+        enrich({
+          id,
+          date: `${month}-15`,
+          amountCents: cents,
+          kind: 'debit',
+          description: `Aluguel ${sheet.label} (planilha)`,
+          account: null,
+          categoryId: cat?.categoryId ?? '__aluguel__',
+          categoryName: cat?.categoryName ?? 'Aluguel',
+          source: 'manual',
+          importFileId: null,
+        }),
+      )
+      plannedRent = { id, tab, label: sheet.label, aluguelCents: me.aluguelCents, caixinhaCents: me.caixinhaCents, cents, nome: me.nome }
     }
   }
 
@@ -821,6 +865,7 @@ export function consolidateMonth(
     incomeByCategory: group(realIncomes, [], false),
     byAccount: [...accMap.values()].sort((a, b) => b.expenseCents - a.expenseCents),
     rentShares,
+    plannedRent,
     issues: issues.filter((i) => !dismissed.has(i.id)),
   }
 }

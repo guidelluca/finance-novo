@@ -355,6 +355,22 @@ export function CasaPage() {
         </p>
       ) : null}
       {error ? <p className="rounded-2xl bg-danger/10 p-3 text-sm text-danger">{error}</p> : null}
+      {result.plannedRent ? (
+        <section className="space-y-2 rounded-3xl border border-border bg-surface p-[18px]">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="text-base font-semibold">Seu aluguel · {result.plannedRent.label}</h2>
+            <span className="text-xs text-muted">previsto · pago entre 10 e 15</span>
+          </div>
+          <dl className="space-y-1 text-sm">
+            <div className="flex justify-between"><dt>Aluguel ({result.plannedRent.nome})</dt><dd className="tabular-nums">{formatBRLFromCents(result.plannedRent.aluguelCents)}</dd></div>
+            <div className="flex justify-between"><dt>Caixinha</dt><dd className="tabular-nums">+ {formatBRLFromCents(result.plannedRent.caixinhaCents)}</dd></div>
+            <div className="flex justify-between border-t border-border pt-1.5 font-semibold"><dt>Seu gasto de casa no mês</dt><dd className="tabular-nums">{formatBRLFromCents(result.plannedRent.cents)}</dd></div>
+          </dl>
+          <p className="text-xs text-muted">
+            Já entra nas suas saídas do mês. Quando o pagamento à imobiliária aparecer no extrato, o app confere cada morador com a planilha.
+          </p>
+        </section>
+      ) : null}
       {loading ? <p className="text-sm text-muted">Carregando…</p> : null}
 
       <section className="space-y-2">
