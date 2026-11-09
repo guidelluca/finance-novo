@@ -1,6 +1,6 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Check, ChevronRight, CircleDashed, Mail, Plus, TriangleAlert, Trash2, Upload } from 'lucide-react'
+import { CalendarX2, Check, ChevronRight, CircleDashed, Mail, Plus, TriangleAlert, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import { usePeriods } from '@/hooks/usePeriods'
 import { saveMonthMode } from '@/lib/period'
 import { saveAccounts, setCoverageMark, type AccountCoverage, type TrackedAccount } from '@/lib/accounts'
 import { shiftMonth } from '@/lib/monthConsolidation'
+import { setQuietMark } from '@/lib/quietDays'
 import { cn } from '@/lib/utils'
 
 const d2 = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
@@ -76,6 +77,19 @@ export function FechamentoPage() {
     }
   }
 
+  const confirmQuiet = async (key: string, label: string) => {
+    if (!user) return
+    setBusy(key)
+    try {
+      await setQuietMark(user, key, true)
+      setNotice(`${label}: confirmado, não falta nada.`)
+    } catch (e) {
+      setNotice(`Não consegui salvar: ${(e as Error).message}`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const updateAccounts = async (list: TrackedAccount[]) => {
     try {
       await saveAccounts(list)
@@ -87,8 +101,11 @@ export function FechamentoPage() {
 
   const monthName = format(parseISO(`${month}-01`), 'LLLL', { locale: ptBR })
   const allAccounts = cov.done === cov.total
-  const closed = allAccounts && pend.total === 0 && !cov.loading && !cons.loading
-  const pct = cov.total ? Math.round(((cov.done / cov.total) * 0.7 + (pend.total === 0 ? 0.3 : 0)) * 100) : 0
+  const quiet = cov.quiet
+  const closed = allAccounts && pend.total === 0 && quiet.pending === 0 && !cov.loading && !cons.loading
+  const pct = cov.total
+    ? Math.round(((cov.done / cov.total) * 0.6 + (pend.total === 0 ? 0.2 : 0) + (cov.quiet.pending === 0 ? 0.2 : 0)) * 100)
+    : 0
   const missing = cov.coverage.filter((c) => c.status === 'falta' || c.status === 'parcial')
 
   return (
@@ -123,6 +140,7 @@ export function FechamentoPage() {
             : [
                 missing.length ? `Faltam extratos: ${missing.map((c) => c.account.name).join(', ')}.` : null,
                 pend.total ? `${pend.total} pendência(s) para você olhar.` : null,
+                quiet.pending ? `${quiet.pending} período(s) sem nenhum lançamento para confirmar.` : null,
               ]
                 .filter(Boolean)
                 .join(' ')}
@@ -226,6 +244,60 @@ export function FechamentoPage() {
           Cada arquivo importado cobre do primeiro ao último lançamento dele. Se a conta não teve movimento no fim do mês, toque em “Está completo”.
         </p>
       </section>
+
+      {!cov.loading && quiet.pending > 0 ? (
+        <section className="space-y-2" aria-labelledby="quiet-title">
+          <h2 id="quiet-title" className="px-1 text-lg font-semibold">
+            Dias sem nenhum lançamento
+          </h2>
+          <p className="px-1 text-xs text-muted">
+            Não achei nenhuma entrada ou saída, em nenhuma conta, nestes dias. Está certo ou faltou importar algo?
+          </p>
+          <div className="rounded-[22px] border border-border bg-surface px-1.5 py-1">
+            {[
+              ...quiet.runs.map((r) => ({
+                key: r.key,
+                title: `${d2(r.from)} a ${d2(r.to)}`,
+                detail: `${r.days} dias seguidos sem nada${r.recent ? ' · até ontem: talvez falte importar o extrato mais recente' : ''}`,
+              })),
+              ...(quiet.singles.length
+                ? [
+                    {
+                      key: quiet.singlesKey,
+                      title: quiet.singles.length === 1 ? `Dia ${d2(quiet.singles[0]!)}` : `${quiet.singles.length} dias soltos`,
+                      detail: quiet.singles.length === 1 ? 'Um dia sem nada' : quiet.singles.map(d2).join(', '),
+                    },
+                  ]
+                : []),
+              ...quiet.silences.map((sl) => ({
+                key: sl.key,
+                title: `${sl.account.name}: ${d2(sl.from)} a ${d2(sl.to)}`,
+                detail: `${sl.days} dias sem lançamento nesta conta (normalmente tem algo a cada ${sl.usualGap === 1 ? 'dia' : `${sl.usualGap} dias`})`,
+              })),
+            ].map((q, i) => (
+              <div key={q.key} className={cn('flex flex-wrap items-center gap-3 px-2.5 py-3', i > 0 && 'border-t border-[#eeefe9] dark:border-[#2b2e34]')}>
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#fff4ec] text-[#9a3412] dark:bg-[#2a1d15] dark:text-[#ffb38a]" aria-hidden>
+                  <CalendarX2 className="size-5" />
+                </span>
+                <div className="min-w-[55%] flex-1">
+                  <p className="text-sm font-semibold">{q.title}</p>
+                  <p className="text-xs text-muted">{q.detail}</p>
+                </div>
+                <div className="ml-auto flex gap-1.5">
+                  <Button size="sm" variant="ghost" disabled={busy === q.key} onClick={() => void confirmQuiet(q.key, q.title)}>
+                    Está certo
+                  </Button>
+                  <Button size="sm" asChild>
+                    <Link to="/import">
+                      <Upload className="size-4" /> Faltou
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="space-y-2">
         <h2 className="px-1 text-lg font-semibold">Pendências para você</h2>

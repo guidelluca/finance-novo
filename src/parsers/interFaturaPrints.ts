@@ -3,7 +3,8 @@
  *   "Compras à vista":  nome (1–2 linhas) · categoria do Inter   |  "-R$ 282,50" · "08/11" (à direita)
  *   "Parcelamentos":    nome (1–2 linhas) · "25/10"             |  "R$ 1.130,02" · "3x de R$ 376,68"
  * O valor fica no meio vertical de cada item: os limites entre itens são os pontos médios entre valores.
- * Parcelamento vira uma linha por parcela ("X (parcela 2/3)"), cada uma no mês em que é cobrada —
+ * Parcelamento vira uma linha por parcela ("X (parcela 2/3)"), cada uma no mês em que é cobrada
+ * (1ª = valor do print; as outras dividem o resto do total) —
  * igual à leitura da fatura em PDF, para as duas fontes não contarem a mesma compra duas vezes.
  * Vários prints sobrepostos: a mesma compra (data + valor + nome) entra uma vez.
  */
@@ -184,13 +185,21 @@ export function parseInterFaturaPrints(pages: OcrPage[], today: string): ParseRe
     const isPayment = /pagamento|pgto.*fatura/i.test(it.desc)
     const hint = it.category && !/^outros$/i.test(it.category) ? it.category : null
     if (it.inst && it.inst.n >= 2 && it.inst.n <= 48) {
-      for (let p = 1; p <= it.inst.n; p++) {
+      // o print mostra a 1ª parcela ("3x de R$ 376,68"); o resto do total se divide nas outras
+      // (R$ 1.130,02 → 376,68 + 376,67 + 376,67, como o Inter cobra)
+      const n = it.inst.n
+      const first = it.inst.cents
+      const restTotal = it.cents - first
+      const sane = restTotal > 0 && Math.abs(restTotal / (n - 1) - first) <= n
+      const other = sane ? Math.floor(restTotal / (n - 1)) : first
+      const lastExtra = sane ? restTotal - other * (n - 1) : 0
+      for (let p = 1; p <= n; p++) {
         const date = addMonths(it.date!, p - 1)
         if (date > today) futureInst += 1
         drafts.push({
           tempId: `itf-${drafts.length + 1}`,
           date,
-          amountCents: it.inst.cents,
+          amountCents: p === 1 ? first : other + (p === n ? lastExtra : 0),
           kind: 'debit',
           descriptionRaw: `${it.desc} (parcela ${p}/${it.inst.n})`,
           categoryHint: hint,

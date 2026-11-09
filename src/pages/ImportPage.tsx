@@ -959,7 +959,36 @@ export function ImportPage() {
           )
         : 0
       skipped += conflictSkipped
-      const savedCount = rows.length - conflictSkipped
+      let savedCount = rows.length - conflictSkipped
+
+      // conferência dupla: relê do banco o que esta importação gravou e compara quantidade e soma
+      let verify = ''
+      {
+        const { data: back, error: vErr } = await supabase
+          .from('transactions')
+          .select('amount_cents, kind')
+          .eq('user_id', user.id)
+          .eq('import_batch_id', batch!.id)
+        if (vErr) verify = ' Não consegui reler o que foi gravado para conferir — abra o Extrato e confira.'
+        else {
+          const got = back ?? []
+          const net = (xs: { amount_cents: number; kind: string }[]) =>
+            xs.reduce((a, r) => a + (r.kind === 'credit' ? r.amount_cents : -r.amount_cents), 0)
+          const wantNet = net(rows)
+          const gotNet = net(got as { amount_cents: number; kind: string }[])
+          if (got.length !== savedCount || (got.length === rows.length && gotNet !== wantNet)) {
+            const missing = rows.length - got.length
+            verify =
+              missing > 0
+                ? ` Conferência: ${got.length} de ${rows.length} gravados — ${missing} não entrou(aram) porque já existia(m) um igual.`
+                : ` Conferência: a soma gravada (${formatBRLFromCents(gotNet)}) difere da lida (${formatBRLFromCents(wantNet)}). Confira no Extrato.`
+            savedCount = got.length
+            skipped = prepared.length - got.length
+          } else if (got.length > 0) {
+            verify = ` Conferido no banco: ${got.length} gravado(s), soma ${formatBRLFromCents(gotNet)}.`
+          }
+        }
+      }
       const possibleDup = toSave.filter((d) => d.reviewFlags?.some((f) => f.startsWith('possível repetida'))).length
       const linkedCards = rows.filter((r) => r.credit_card_id).length
       const extra =
@@ -968,7 +997,8 @@ export function ImportPage() {
           ? ` ${possibleDup} possível(is) repetida(s) entraram sem contar nos totais: confirme no Extrato ou no Mês.`
           : '') +
         (linkedCards ? ` ${linkedCards} ligados ao cartão cadastrado.` : '') +
-        (learned ? ` ${learned} regra(s) aprendida(s) com suas correções.` : '')
+        (learned ? ` ${learned} regra(s) aprendida(s) com suas correções.` : '') +
+        verify
       setSaveNotice(
         (skipped > 0
           ? `${savedCount} lançamento(s) gravados. ${skipped} ignorado(s) (já estavam salvos, idênticos).`

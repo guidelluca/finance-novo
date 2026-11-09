@@ -10,6 +10,7 @@ import {
   type AccountCoverage,
   type CoverageTx,
 } from '@/lib/accounts'
+import { computeQuietDays, readQuietMarks } from '@/lib/quietDays'
 
 /** Cobertura dos extratos de cada conta acompanhada no mês. */
 export function useCoverage(month: string) {
@@ -42,6 +43,10 @@ export function useCoverage(month: string) {
     () => computeCoverage(month, accounts, txs, format(new Date(), 'yyyy-MM-dd'), readCoverageMarks(user), bounds),
     [month, accounts, txs, user, bounds],
   )
+  const quiet = useMemo(
+    () => computeQuietDays(bounds, format(new Date(), 'yyyy-MM-dd'), txs, accounts, readQuietMarks(user)),
+    [bounds, txs, accounts, user],
+  )
   const done = coverage.filter((c) => c.status === 'completo' || c.status === 'em_andamento').length
-  return { loading, error, coverage, accounts, done, total: coverage.length, reload: load, bounds }
+  return { loading, error, coverage, accounts, quiet, done, total: coverage.length, reload: load, bounds }
 }

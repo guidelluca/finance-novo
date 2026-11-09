@@ -210,7 +210,7 @@ export function HomePage() {
       </section>
 
       {/* Fechamento do mês anterior */}
-      {!closing.loading && closingMissing.length > 0 ? (
+      {!closing.loading && (closingMissing.length > 0 || closing.quiet.pending > 0) ? (
         <Link to="/fechamento" className="flex items-start gap-3.5 rounded-3xl border border-[#f6d3bb] bg-[#fff4ec] p-4 text-[#7c2d12] dark:border-[#5a3622] dark:bg-[#2a1d15] dark:text-[#ffd9c2]">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/80 text-[#9a3412] dark:bg-black/20 dark:text-[#ffb38a]">
             <ClipboardCheck className="size-[18px]" strokeWidth={2} />
@@ -220,7 +220,13 @@ export function HomePage() {
               Fechamento de {format(parseISO(`${closingMonth}-01`), 'LLLL', { locale: ptBR })}: {closing.done} de {closing.total} contas completas
             </span>
             <span className="block text-[13px] leading-snug opacity-85">
-              Falta{closingMissing.length > 1 ? 'm' : ''}: {closingMissing.map((c) => c.account.name).join(', ')}. Toque para ver e importar.
+              {closingMissing.length > 0
+                ? `Falta${closingMissing.length > 1 ? 'm' : ''}: ${closingMissing.map((c) => c.account.name).join(', ')}. `
+                : ''}
+              {closing.quiet.pending > 0
+                ? `${closing.quiet.pending} período(s) sem nenhum lançamento para você confirmar. `
+                : ''}
+              Toque para ver.
             </span>
           </span>
         </Link>

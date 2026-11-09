@@ -12,6 +12,7 @@
  * Sem dependências (testável isoladamente).
  */
 import type { ParseResult, TransactionDraft } from './types'
+import { looksLikeInterFaturaPdf, parseInterFaturaPdf } from './interFaturaPdf'
 
 export type PdfItem = { x: number; y: number; w: number; str: string }
 /** y de cima para baixo */
@@ -128,6 +129,8 @@ export function splitColumns(page: PdfPage): PdfItem[][] {
 }
 
 function detectBank(text: string): string | null {
+  // antes do PicPay: uma compra "PICPAY*CVC" numa fatura do Inter não faz dela uma fatura PicPay
+  if (/banco inter s\/?a|bancointer\.com\.br/i.test(text)) return 'Inter'
   if (/picpay/i.test(text)) return 'PicPay'
   if (/ita[uú]\s*cart[oõ]es|itaucard|ita[uú] unibanco|\bita[uú]\b/i.test(text)) return 'Itaú'
   if (/nubank|nu pagamentos/i.test(text)) return 'Nubank'
@@ -176,6 +179,8 @@ export function looksLikeCreditCardInvoice(text: string): boolean {
 export function parseFaturaCartao(pages: PdfPage[], todayIso?: string): FaturaParseResult {
   const warnings: string[] = []
   const allText = pages.map((p) => itemsToLines(p.items).join('\n')).join('\n')
+  // Inter: layout próprio ("18 de out. 2026", total por cartão) e confere vários totais impressos
+  if (looksLikeInterFaturaPdf(allText)) return parseInterFaturaPdf(pages)
   const bank = detectBank(allText)
   const closing = findClosingDate(allText) ?? todayIso ?? localTodayIso()
   const cy = Number(closing.slice(0, 4))
