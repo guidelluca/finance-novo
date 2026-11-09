@@ -5,8 +5,8 @@ import { MonthSwitcher } from '@/components/ui/month-switcher'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMonthData } from '@/hooks/useMonthData'
 import { usePeriods } from '@/hooks/usePeriods'
-import { formatBRLFromCents } from '@/lib/currency'
-import { classifyHouse, markHouseTx, readHouse, saveHouse, type HouseConfig } from '@/lib/house'
+import { formatBRLFromCents, parseMoneyToCents } from '@/lib/currency'
+import { caixinhaShare, classifyHouse, markHouseTx, readHouse, saveHouse, setCaixinha, type HouseConfig } from '@/lib/house'
 import { RENT_PIX_MIN, shiftMonth, type ConsTx } from '@/lib/monthConsolidation'
 import { cn } from '@/lib/utils'
 
@@ -60,6 +60,40 @@ export function CasaPage() {
   const house = readHouse(user)
   const [notice, setNotice] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const cx = caixinhaShare(house, month)
+  const [cxInput, setCxInput] = useState('')
+  const [peopleInput, setPeopleInput] = useState('')
+  useEffect(() => {
+    setCxInput(cx.totalCents ? (cx.totalCents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '')
+    setPeopleInput(String(cx.people))
+  }, [month, cx.totalCents, cx.people])
+  const saveCaixinha = async () => {
+    if (!user) return
+    const cents = cxInput.trim() ? parseMoneyToCents(cxInput) : 0
+    const people = Number(peopleInput)
+    if (cents == null || Number.isNaN(cents) || cents < 0) {
+      setNotice('Valor da caixinha inválido. Ex.: 300 ou 300,00')
+      return
+    }
+    if (!Number.isFinite(people) || people < 1) {
+      setNotice('Número de moradores inválido.')
+      return
+    }
+    setBusyId('caixinha')
+    try {
+      await setCaixinha(user, month, cents, people)
+      const per = Math.round(cents / Math.round(people))
+      setNotice(
+        cents
+          ? `Caixinha de ${formatBRLFromCents(cents)} ÷ ${Math.round(people)} = ${formatBRLFromCents(per)} por pessoa. Somei ${formatBRLFromCents(per)} ao seu aluguel deste mês.`
+          : 'Caixinha deste mês apagada.',
+      )
+    } catch (e) {
+      setNotice(`Não consegui salvar: ${(e as Error).message}`)
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   // aluguel com parte sua: sai da casa inteiro, e a sua parte entra na casa como contribuição sua
   const rents = result.rentShares
@@ -188,6 +222,51 @@ export function CasaPage() {
         </p>
       </section>
 
+      <section className="space-y-3 rounded-3xl border border-border bg-surface p-[18px]">
+        <div>
+          <h2 className="text-base font-semibold">Caixinha do mês</h2>
+          <p className="text-xs text-muted">
+            O total é dividido igualmente entre os moradores. A sua parte soma ao seu aluguel deste mês.
+          </p>
+        </div>
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void saveCaixinha()
+          }}
+        >
+          <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted">
+            Valor total (R$)
+            <input
+              inputMode="decimal"
+              value={cxInput}
+              onChange={(e) => setCxInput(e.target.value)}
+              placeholder="Ex.: 300,00"
+              className="h-10 rounded-xl border border-border bg-background px-3 text-sm text-foreground"
+            />
+          </label>
+          <label className="flex w-24 flex-col gap-1 text-xs text-muted">
+            Moradores
+            <input
+              inputMode="numeric"
+              value={peopleInput}
+              onChange={(e) => setPeopleInput(e.target.value.replace(/\D/g, ''))}
+              className="h-10 rounded-xl border border-border bg-background px-3 text-sm text-foreground"
+            />
+          </label>
+          <Button size="sm" type="submit" disabled={busyId === 'caixinha'} className="h-10">
+            Salvar
+          </Button>
+        </form>
+        {cx.totalCents ? (
+          <p className="text-sm">
+            {formatBRLFromCents(cx.totalCents)} ÷ {cx.people} = <strong>{formatBRLFromCents(cx.shareCents)}</strong> por pessoa
+            {rents.length ? ' · somado ao seu aluguel' : ' · ainda não achei o pagamento do aluguel neste mês para somar'}
+          </p>
+        ) : null}
+      </section>
+
       {rents.map((r) => (
         <section key={r.txId} className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">
           <div className="flex items-baseline justify-between">
@@ -203,8 +282,22 @@ export function CasaPage() {
                 <dd className="shrink-0 tabular-nums">− {formatBRLFromCents(f.cents)}</dd>
               </div>
             ))}
+            {r.caixinhaCents ? (
+              <>
+                <div className="flex justify-between gap-3 border-t border-border pt-1.5">
+                  <dt className="text-muted">{r.rentPartCents >= 0 ? 'Sua parte do aluguel' : 'Sobrou do aluguel'}</dt>
+                  <dd className="shrink-0 tabular-nums">{formatBRLFromCents(Math.abs(r.rentPartCents))}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">
+                    + caixinha {formatBRLFromCents(r.caixinhaTotalCents)} ÷ {cx.people}
+                  </dt>
+                  <dd className="shrink-0 tabular-nums">+ {formatBRLFromCents(r.caixinhaCents)}</dd>
+                </div>
+              </>
+            ) : null}
             <div className="flex justify-between gap-3 border-t border-border pt-1.5 font-semibold">
-              <dt>{r.shareCents >= 0 ? 'Sua parte (conta como seu gasto)' : 'Sobrou com a casa'}</dt>
+              <dt>{r.shareCents >= 0 ? 'Seu aluguel no mês (conta como seu gasto)' : 'Sobrou com a casa'}</dt>
               <dd className="shrink-0 tabular-nums">{formatBRLFromCents(Math.abs(r.shareCents))}</dd>
             </div>
           </dl>

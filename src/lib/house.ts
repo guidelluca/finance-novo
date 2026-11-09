@@ -16,6 +16,10 @@ export type HouseConfig = {
   keywords: string[]
   /** marcações feitas à mão: lançamento → da casa / meu */
   tx: Record<string, 'casa' | 'meu'>
+  /** valor total da caixinha em cada mês ("2026-11" → centavos), dividido igualmente entre os moradores */
+  caixinha: Record<string, number>
+  /** quantas pessoas moram na casa e dividem a caixinha (você incluído) */
+  people: number
 }
 
 export const DEFAULT_HOUSE: HouseConfig = {
@@ -24,6 +28,8 @@ export const DEFAULT_HOUSE: HouseConfig = {
   payees: ['Lanza Imóveis'],
   keywords: ['caixinha'],
   tx: {},
+  caixinha: {},
+  people: 5,
 }
 
 export function readHouse(user: User | null): HouseConfig {
@@ -35,6 +41,8 @@ export function readHouse(user: User | null): HouseConfig {
     payees: Array.isArray(raw.payees) ? raw.payees.filter((m) => typeof m === 'string') : DEFAULT_HOUSE.payees,
     keywords: Array.isArray(raw.keywords) ? raw.keywords.filter((m) => typeof m === 'string') : DEFAULT_HOUSE.keywords,
     tx: raw.tx && typeof raw.tx === 'object' ? (raw.tx as HouseConfig['tx']) : {},
+    caixinha: raw.caixinha && typeof raw.caixinha === 'object' ? (raw.caixinha as HouseConfig['caixinha']) : {},
+    people: typeof raw.people === 'number' && raw.people >= 1 ? Math.round(raw.people) : DEFAULT_HOUSE.people,
   }
 }
 
@@ -126,6 +134,23 @@ export async function markHouseTx(user: User, txId: string, value: 'casa' | 'meu
   if (value) tx[txId] = value
   else delete tx[txId]
   const next = { ...cfg, tx }
+  await saveHouse(next)
+  return next
+}
+
+/** Sua parte da caixinha no mês (total ÷ moradores). */
+export function caixinhaShare(cfg: HouseConfig | null, month: string): { totalCents: number; shareCents: number; people: number } {
+  const totalCents = cfg?.caixinha?.[month] ?? 0
+  const people = Math.max(1, cfg?.people ?? DEFAULT_HOUSE.people)
+  return { totalCents, shareCents: Math.round(totalCents / people), people }
+}
+
+export async function setCaixinha(user: User, month: string, cents: number | null, people?: number): Promise<HouseConfig> {
+  const cfg = readHouse(user)
+  const caixinha = { ...cfg.caixinha }
+  if (cents && cents > 0) caixinha[month] = cents
+  else delete caixinha[month]
+  const next = { ...cfg, caixinha, people: people && people >= 1 ? Math.round(people) : cfg.people }
   await saveHouse(next)
   return next
 }

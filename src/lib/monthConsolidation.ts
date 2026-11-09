@@ -5,7 +5,7 @@
  *
  * Sem dependências externas (testável isoladamente). Nada é apagado aqui: só classifica.
  */
-import { classifyHouse, type HouseConfig } from '@/lib/house'
+import { caixinhaShare, classifyHouse, type HouseConfig } from '@/lib/house'
 import { identifyMerchant } from './merchantIdentify'
 
 export type TxSource = 'fatura' | 'extrato' | 'csv' | 'print' | 'manual'
@@ -102,6 +102,12 @@ export type RentShare = {
   date: string
   paidCents: number
   receivedCents: number
+  /** aluguel − Pix dos moradores (antes da caixinha) */
+  rentPartCents: number
+  /** caixinha do mês ÷ moradores, somada à sua parte (só no 1.º aluguel do mês) */
+  caixinhaCents: number
+  caixinhaTotalCents: number
+  /** o que conta como gasto seu: parte do aluguel + parte da caixinha */
   shareCents: number
   from: { who: string; cents: number; date: string; txId: string }[]
 }
@@ -299,8 +305,21 @@ export function consolidateMonth(
         from.push({ who: h!.who, cents: t.amountCents, date: t.date, txId: t.id })
       }
       const receivedCents = from.reduce((a, x) => a + x.cents, 0)
-      const shareCents = pay.amountCents - receivedCents
-      rentShares.push({ txId: pay.id, date: pay.date, paidCents: pay.amountCents, receivedCents, shareCents, from })
+      const rentPartCents = pay.amountCents - receivedCents
+      // caixinha do mês dividida entre os moradores: a sua parte soma ao seu aluguel (uma vez por mês)
+      const cx = rentShares.length === 0 ? caixinhaShare(house, month) : { totalCents: 0, shareCents: 0 }
+      const shareCents = rentPartCents + cx.shareCents
+      rentShares.push({
+        txId: pay.id,
+        date: pay.date,
+        paidCents: pay.amountCents,
+        receivedCents,
+        rentPartCents,
+        caixinhaCents: cx.shareCents,
+        caixinhaTotalCents: cx.totalCents,
+        shareCents,
+        from,
+      })
       if (shareCents > 0) {
         // entra nos seus gastos só a diferença, como aluguel
         excluded.delete(pay.id)

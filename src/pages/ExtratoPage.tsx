@@ -594,8 +594,9 @@ export function ExtratoPage() {
                         {rent ? (
                           <div className="space-y-1 rounded-xl bg-background p-2.5 text-xs">
                             <p className="font-semibold">
-                              Aluguel {formatBRLFromCents(rent.paidCents)} − moradores {formatBRLFromCents(rent.receivedCents)} ={' '}
-                              {rent.shareCents > 0 ? `sua parte ${formatBRLFromCents(rent.shareCents)}` : 'nada para você'}
+                              Aluguel {formatBRLFromCents(rent.paidCents)} − moradores {formatBRLFromCents(rent.receivedCents)}
+                              {rent.caixinhaCents ? ` + caixinha ${formatBRLFromCents(rent.caixinhaCents)}` : ''} ={' '}
+                              {rent.shareCents > 0 ? `seu aluguel ${formatBRLFromCents(rent.shareCents)}` : 'nada para você'}
                             </p>
                             {rent.from.length ? (
                               <ul className="text-muted">
