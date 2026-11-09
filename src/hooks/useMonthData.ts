@@ -2,7 +2,8 @@ import { format } from 'date-fns'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePeriods } from '@/hooks/usePeriods'
-import { readHouse } from '@/lib/house'
+import { readHouseWithSheets } from '@/lib/house'
+import { SHEET_EVENT } from '@/lib/houseSheet'
 import { shiftMonthKey } from '@/lib/period'
 import { consolidateMonth, type ConsTx, type TxSource } from '@/lib/monthConsolidation'
 import { supabase } from '@/lib/supabase'
@@ -86,6 +87,14 @@ export function useMonthData(month: string) {
     void load()
   }, [load])
 
+  // planilha da casa lida (ou relida) em outra tela: recalcula o mês
+  const [sheetVersion, setSheetVersion] = useState(0)
+  useEffect(() => {
+    const on = () => setSheetVersion((v) => v + 1)
+    window.addEventListener(SHEET_EVENT, on)
+    return () => window.removeEventListener(SHEET_EVENT, on)
+  }, [])
+
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
 
   const { monthTxs, history } = useMemo(() => {
@@ -128,9 +137,10 @@ export function useMonthData(month: string) {
         dismissed,
         (user?.user_metadata?.owner_name as string | undefined) ?? null,
         periods.periodOf,
-        readHouse(user),
+        readHouseWithSheets(user),
       ),
-    [month, monthTxs, history, dismissed, user, periods],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [month, monthTxs, history, dismissed, user, periods, sheetVersion],
   )
 
   return { loading, error, categories, result, monthTxs, history, reload: load, range, periods, dismissed }

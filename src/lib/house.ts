@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { readAllSheetCaches, type HouseSheet, type SheetResident } from '@/lib/houseSheet'
 
 /**
  * Finanças da casa (república) que passam pela conta do usuário como tesoureiro:
@@ -20,6 +21,8 @@ export type HouseConfig = {
   caixinha: Record<string, number>
   /** quantas pessoas moram na casa e dividem a caixinha (você incluído) */
   people: number
+  /** abas da planilha da casa já lidas neste aparelho (não vai para a conta) */
+  sheets?: Record<string, HouseSheet>
 }
 
 export const DEFAULT_HOUSE: HouseConfig = {
@@ -46,8 +49,14 @@ export function readHouse(user: User | null): HouseConfig {
   }
 }
 
+/** Configuração + planilha da casa lida neste aparelho (para o cálculo do mês). */
+export function readHouseWithSheets(user: User | null): HouseConfig {
+  return { ...readHouse(user), sheets: readAllSheetCaches() }
+}
+
 export async function saveHouse(cfg: HouseConfig): Promise<void> {
-  const { error } = await supabase.auth.updateUser({ data: { house: cfg } })
+  const { sheets: _sheets, ...data } = cfg
+  const { error } = await supabase.auth.updateUser({ data: { house: data } })
   if (error) throw error
 }
 
@@ -153,4 +162,28 @@ export async function setCaixinha(user: User, month: string, cents: number | nul
   const next = { ...cfg, caixinha, people: people && people >= 1 ? Math.round(people) : cfg.people }
   await saveHouse(next)
   return next
+}
+
+const firstName = (s: string) => foldName(s).split(' ')[0] ?? ''
+
+/** Linha da planilha de um morador cadastrado ("Luísa" na planilha ↔ "Luísa Stolf"). */
+export function residentOf(member: string, residents: SheetResident[]): SheetResident | null {
+  const fm = foldName(member)
+  return (
+    residents.find((r) => foldName(r.nome) === fm) ??
+    residents.find((r) => fm.startsWith(foldName(r.nome)) || foldName(r.nome).startsWith(fm)) ??
+    residents.find((r) => firstName(r.nome) === firstName(member)) ??
+    null
+  )
+}
+
+/** A sua linha: a que tem o seu primeiro nome, ou a única que não é de nenhum morador cadastrado. */
+export function selfResident(residents: SheetResident[], cfg: HouseConfig, ownerName: string | null): SheetResident | null {
+  if (ownerName) {
+    const mine = residents.find((r) => firstName(r.nome) === firstName(ownerName))
+    if (mine) return mine
+  }
+  const others = new Set(cfg.members.map((m) => residentOf(m, residents)).filter(Boolean))
+  const rest = residents.filter((r) => !others.has(r))
+  return rest.length === 1 ? rest[0]! : null
 }

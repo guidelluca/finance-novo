@@ -5,7 +5,8 @@
  *
  * Sem dependências externas (testável isoladamente). Nada é apagado aqui: só classifica.
  */
-import { caixinhaShare, classifyHouse, type HouseConfig } from '@/lib/house'
+import { caixinhaShare, classifyHouse, residentOf, selfResident, type HouseConfig } from '@/lib/house'
+import { sheetTabForPayment, type SheetResident } from '@/lib/houseSheet'
 import { identifyMerchant } from './merchantIdentify'
 
 export type TxSource = 'fatura' | 'extrato' | 'csv' | 'print' | 'manual'
@@ -110,6 +111,17 @@ export type RentShare = {
   /** o que conta como gasto seu: parte do aluguel + parte da caixinha */
   shareCents: number
   from: { who: string; cents: number; date: string; txId: string }[]
+  /** aba da planilha que confere com este aluguel (mês anterior ao pagamento) */
+  sheetTab: string
+  /** planilha lida: sua linha e o que cada morador deveria ter mandado */
+  sheet: {
+    tab: string
+    label: string
+    fetchedAt: string
+    me: SheetResident
+    members: { who: string; nome: string | null; expectedCents: number | null; paidCents: number }[]
+    aluguelSumCents: number
+  } | null
 }
 
 /** Pix de morador abaixo disso é caixinha/rateio de conta, não aluguel */
@@ -278,12 +290,15 @@ export function consolidateMonth(
     }
   }
 
-  // 0c) Aluguel: a casa paga a imobiliária com o dinheiro dos moradores; o que faltou é a SUA parte.
-  //     Ex.: R$ 4.316 para a Lanza − R$ 3.450 recebidos de Alan, Luísa, Ramon, Vitor e Maria = R$ 866 seu.
+  // 0c) Aluguel. Duas fontes, uma confere a outra:
+  //     - planilha da casa (aba do mês anterior ao pagamento): seu gasto = Aluguel + Caixinha da SUA linha,
+  //       e cada morador deve ter mandado o TOTAL da linha dele;
+  //     - banco: R$ 4.316 para a Lanza − Pix dos moradores (+ caixinha digitada à mão) = sua parte.
+  //     Com a planilha lida, ela manda; o banco vira conferência.
   const rentShares: RentShare[] = []
   if (house) {
     const pool = [...hist, ...items]
-      .filter((t) => t.kind === 'credit' && t.amountCents >= RENT_PIX_MIN)
+      .filter((t) => t.kind === 'credit')
       .map((t) => ({ t, h: classifyHouse({ id: t.id, description: t.description, kind: t.kind }, house) }))
       .filter((x) => x.h?.kind === 'casa' && (x.h.why === 'morador' || x.h.why === 'manual'))
     const used = new Set<string>()
@@ -292,36 +307,66 @@ export function consolidateMonth(
       .filter((t) => classifyHouse({ id: t.id, description: t.description, kind: t.kind }, house)?.why === 'pagamento')
       .sort((a, b) => (a.date < b.date ? -1 : 1))
     for (const pay of payments) {
-      // Pix dos moradores de até 25 dias antes a 10 dias depois do pagamento, um de cada morador
+      const tab = sheetTabForPayment(pay.date)
+      const sheet = house.sheets?.[tab] ?? null
+      // Pix dos moradores de até 25 dias antes a 10 dias depois do pagamento.
+      // Sem planilha: um Pix por morador, a partir de R$ 300 (menores são caixinha).
+      // Com planilha: soma todos os Pix de cada morador (pode ter pago em partes) para comparar com o TOTAL dele.
       const from: RentShare['from'] = []
       const seenWho = new Set<string>()
       const cands = pool
         .filter(({ t }) => !used.has(t.id) && dayDiff(t.date, pay.date) <= 25 && t.date <= shiftIso(pay.date, 10))
+        .filter(({ t }) => sheet || t.amountCents >= RENT_PIX_MIN)
         .sort((a, b) => dayDiff(a.t.date, pay.date) - dayDiff(b.t.date, pay.date))
       for (const { t, h } of cands) {
-        if (seenWho.has(h!.who)) continue
+        if (!sheet && seenWho.has(h!.who)) continue
         seenWho.add(h!.who)
         used.add(t.id)
         from.push({ who: h!.who, cents: t.amountCents, date: t.date, txId: t.id })
       }
       const receivedCents = from.reduce((a, x) => a + x.cents, 0)
       const rentPartCents = pay.amountCents - receivedCents
-      // caixinha do mês dividida entre os moradores: a sua parte soma ao seu aluguel (uma vez por mês)
-      const cx = rentShares.length === 0 ? caixinhaShare(house, month) : { totalCents: 0, shareCents: 0 }
-      const shareCents = rentPartCents + cx.shareCents
+
+      let shareCents: number
+      let cxCents = 0
+      let cxTotal = 0
+      let sheetCheck: RentShare['sheet'] = null
+      const me = sheet ? selfResident(sheet.residents, house, ownerName) : null
+      if (sheet && me && rentShares.every((r) => r.sheet?.tab !== tab)) {
+        shareCents = me.aluguelCents + me.caixinhaCents
+        cxCents = me.caixinhaCents
+        const members = house.members.map((m) => {
+          const row = residentOf(m, sheet.residents)
+          return {
+            who: m,
+            nome: row?.nome ?? null,
+            expectedCents: row?.totalCents ?? null,
+            paidCents: from.filter((f) => f.who === m).reduce((a, f) => a + f.cents, 0),
+          }
+        })
+        sheetCheck = { tab, label: sheet.label, fetchedAt: sheet.fetchedAt, me, members, aluguelSumCents: sheet.aluguelSumCents }
+      } else {
+        // caixinha do mês digitada à mão, dividida entre os moradores (uma vez por mês)
+        const cx = rentShares.length === 0 ? caixinhaShare(house, month) : { totalCents: 0, shareCents: 0 }
+        cxCents = cx.shareCents
+        cxTotal = cx.totalCents
+        shareCents = rentPartCents + cx.shareCents
+      }
       rentShares.push({
         txId: pay.id,
         date: pay.date,
         paidCents: pay.amountCents,
         receivedCents,
         rentPartCents,
-        caixinhaCents: cx.shareCents,
-        caixinhaTotalCents: cx.totalCents,
+        caixinhaCents: cxCents,
+        caixinhaTotalCents: cxTotal,
         shareCents,
         from,
+        sheetTab: tab,
+        sheet: sheetCheck,
       })
       if (shareCents > 0) {
-        // entra nos seus gastos só a diferença, como aluguel
+        // entra nos seus gastos só a sua parte, como aluguel
         excluded.delete(pay.id)
         const idx = items.indexOf(pay)
         items[idx] = { ...pay, amountCents: shareCents }

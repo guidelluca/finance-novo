@@ -1,4 +1,4 @@
-import { Check, Clock, Info, Plus, X } from 'lucide-react'
+import { Check, Clock, Info, Plus, RefreshCw, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { MonthSwitcher } from '@/components/ui/month-switcher'
@@ -7,7 +7,8 @@ import { useMonthData } from '@/hooks/useMonthData'
 import { usePeriods } from '@/hooks/usePeriods'
 import { formatBRLFromCents, parseMoneyToCents } from '@/lib/currency'
 import { caixinhaShare, classifyHouse, markHouseTx, readHouse, saveHouse, setCaixinha, type HouseConfig } from '@/lib/house'
-import { RENT_PIX_MIN, shiftMonth, type ConsTx } from '@/lib/monthConsolidation'
+import { RENT_PIX_MIN, shiftMonth, type ConsTx, type RentShare } from '@/lib/monthConsolidation'
+import { fetchHouseSheet, readSheetCache, sheetTabForPayment } from '@/lib/houseSheet'
 import { cn } from '@/lib/utils'
 
 const d2 = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
@@ -142,6 +143,26 @@ export function CasaPage() {
   )
   const paidCount = byMember.filter((m) => m.cents > 0).length
 
+  // planilha da casa: aba do mês anterior ao pagamento do aluguel deste mês (nov → OUT_2026)
+  const sheetTab = rents[0]?.sheetTab ?? sheetTabForPayment(`${month}-05`)
+  const [sheetState, setSheetState] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null })
+  const cached = readSheetCache(sheetTab)
+  const loadSheet = async () => {
+    setSheetState({ loading: true, error: null })
+    try {
+      await fetchHouseSheet(sheetTab)
+      setSheetState({ loading: false, error: null })
+    } catch (e) {
+      setSheetState({ loading: false, error: (e as Error).message })
+    }
+  }
+  useEffect(() => {
+    const c = readSheetCache(sheetTab)
+    // lê sozinho ao abrir se nunca leu esta aba ou se a leitura tem mais de 6 h
+    if (!c || Date.now() - Date.parse(c.fetchedAt) > 6 * 3_600_000) void loadSheet()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetTab])
+
   const mark = async (t: ConsTx & { merchant?: string }, value: 'casa' | 'meu') => {
     if (!user) return
     setBusyId(t.id)
@@ -222,11 +243,31 @@ export function CasaPage() {
         </p>
       </section>
 
+      <section className="flex flex-wrap items-center gap-3 rounded-3xl border border-border bg-surface p-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">Planilha da casa · {cached?.label ?? sheetTab}</p>
+          <p className={cn('text-xs', sheetState.error ? 'text-danger' : 'text-muted')}>
+            {sheetState.loading
+              ? 'Lendo a planilha… (a 1ª leitura pode levar até 1 minuto)'
+              : sheetState.error
+                ? sheetState.error
+                : cached
+                  ? `Lida em ${new Date(cached.fetchedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · confere o aluguel pago neste mês`
+                  : 'Ainda não lida'}
+          </p>
+        </div>
+        <Button size="sm" variant="secondary" disabled={sheetState.loading} onClick={() => void loadSheet()}>
+          <RefreshCw className={cn('size-4', sheetState.loading && 'animate-spin')} /> {cached ? 'Atualizar' : 'Ler'}
+        </Button>
+      </section>
+
       <section className="space-y-3 rounded-3xl border border-border bg-surface p-[18px]">
         <div>
           <h2 className="text-base font-semibold">Caixinha do mês</h2>
           <p className="text-xs text-muted">
-            O total é dividido igualmente entre os moradores. A sua parte soma ao seu aluguel deste mês.
+            {rents.some((r) => r.sheet)
+              ? 'Vem da planilha (coluna Caixinha da sua linha). O valor digitado aqui só vale para meses sem planilha.'
+              : 'O total é dividido igualmente entre os moradores. A sua parte soma ao seu aluguel deste mês.'}
           </p>
         </div>
         <form
@@ -267,7 +308,7 @@ export function CasaPage() {
         ) : null}
       </section>
 
-      {rents.map((r) => (
+      {rents.map((r) => r.sheet ? <SheetRentCard key={r.txId} r={r} /> : (
         <section key={r.txId} className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">
           <div className="flex items-baseline justify-between">
             <h2 className="text-base font-semibold">Aluguel de {d2(r.date)}</h2>
@@ -422,5 +463,75 @@ export function CasaPage() {
         </div>
       </details>
     </div>
+  )
+}
+
+const brl = formatBRLFromCents
+
+function Diff({ expected, paid }: { expected: number | null; paid: number }) {
+  if (expected == null) return <span className="text-xs text-muted">não está na planilha</span>
+  const d = paid - expected
+  if (Math.abs(d) <= 100)
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#3f5a12] dark:text-[#c8f169]">
+        <Check className="size-3.5" aria-hidden /> bate
+      </span>
+    )
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#9a3412] dark:text-[#ffb38a]">
+      <TriangleAlert className="size-3.5" aria-hidden /> {d < 0 ? `falta ${brl(-d)}` : `${brl(d)} a mais`}
+    </span>
+  )
+}
+
+/** Aluguel conferido com a planilha: sua linha define o seu gasto; cada morador confere com o banco. */
+function SheetRentCard({ r }: { r: RentShare }) {
+  const sh = r.sheet!
+  const lanzaOk = Math.abs(sh.aluguelSumCents - r.paidCents) <= 100
+  const problems = sh.members.filter((m) => m.expectedCents == null || Math.abs(m.paidCents - m.expectedCents) > 100).length + (lanzaOk ? 0 : 1)
+  return (
+    <section className="space-y-3 rounded-3xl border border-border bg-surface p-[18px]">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-base font-semibold">Aluguel de {d2(r.date)} × planilha {sh.label}</h2>
+        <span className={cn('shrink-0 text-xs font-semibold', problems ? 'text-[#9a3412] dark:text-[#ffb38a]' : 'text-[#3f5a12] dark:text-[#c8f169]')}>
+          {problems ? `${problems} diferença(s)` : 'tudo bate'}
+        </span>
+      </div>
+
+      <div className="space-y-1 rounded-2xl bg-background p-3 text-sm">
+        <p className="text-xs text-muted">Sua linha na planilha ({sh.me.nome})</p>
+        <div className="flex justify-between"><span>Aluguel</span><span className="tabular-nums">{brl(sh.me.aluguelCents)}</span></div>
+        <div className="flex justify-between"><span>Caixinha</span><span className="tabular-nums">+ {brl(sh.me.caixinhaCents)}</span></div>
+        <div className="flex justify-between border-t border-border pt-1.5 font-semibold">
+          <span>Seu gasto de casa no mês</span>
+          <span className="tabular-nums">{brl(r.shareCents)}</span>
+        </div>
+      </div>
+
+      <ul className="space-y-1.5 text-sm">
+        <li className="flex flex-wrap items-center justify-between gap-x-3">
+          <span className="min-w-0 truncate">Pago à imobiliária {brl(r.paidCents)} × soma do aluguel na planilha {brl(sh.aluguelSumCents)}</span>
+          {lanzaOk ? (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#3f5a12] dark:text-[#c8f169]"><Check className="size-3.5" aria-hidden /> bate</span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#9a3412] dark:text-[#ffb38a]"><TriangleAlert className="size-3.5" aria-hidden /> diferença {brl(Math.abs(sh.aluguelSumCents - r.paidCents))}</span>
+          )}
+        </li>
+        {sh.members.map((m) => (
+          <li key={m.who} className="flex flex-wrap items-center justify-between gap-x-3 border-t border-[#eeefe9] pt-1.5 dark:border-[#2b2e34]">
+            <span className="min-w-0 flex-1 truncate">
+              {m.who}
+              <span className="block text-xs text-muted">
+                planilha {m.expectedCents != null ? brl(m.expectedCents) : '—'} · Pix recebido {brl(m.paidCents)}
+              </span>
+            </span>
+            <Diff expected={m.expectedCents} paid={m.paidCents} />
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted">
+        Pix de cada morador de até 25 dias antes a 10 dias depois do aluguel, comparados com o TOTAL da linha dele. Diferença de até R$ 1 conta como “bate”.
+      </p>
+    </section>
   )
 }

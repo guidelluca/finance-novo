@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useChartTheme } from '@/hooks/useChartTheme'
 import { formatBRLFromCents } from '@/lib/currency'
 import { consolidateMonth, shiftMonth, type ConsolidatedMonth, type ConsTx } from '@/lib/monthConsolidation'
-import { readHouse } from '@/lib/house'
+import { readHouseWithSheets } from '@/lib/house'
 import { detectRecurring } from '@/lib/recurring'
 import { paymentMethodOf, type CardInfo, type MethodGroup } from '@/lib/paymentMethod'
 import type { Periods } from '@/lib/period'
@@ -82,7 +82,7 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
       const r =
         m === month
           ? result
-          : consolidateMonth(m, all.filter((t) => periods.periodOf(t.date) === m), all.filter((t) => periods.periodOf(t.date) < m), today, dismissed, owner, periods.periodOf, readHouse(user))
+          : consolidateMonth(m, all.filter((t) => periods.periodOf(t.date) === m), all.filter((t) => periods.periodOf(t.date) < m), today, dismissed, owner, periods.periodOf, readHouseWithSheets(user))
       return {
         key: m,
         label: format(parseISO(`${m}-01`), 'MMM', { locale: ptBR }).replace('.', ''),
@@ -187,7 +187,7 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
   const upcomingFixed = useMemo(
     () =>
       isCurrent
-        ? detectRecurring(month, monthTxs, history, owner, readHouse(user))
+        ? detectRecurring(month, monthTxs, history, owner, readHouseWithSheets(user))
             .filter((r) => !r.paidThisMonth)
             .reduce((s, r) => s + r.amountCents, 0)
         : 0,
