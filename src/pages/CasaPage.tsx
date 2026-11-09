@@ -143,8 +143,8 @@ export function CasaPage() {
   )
   const paidCount = byMember.filter((m) => m.cents > 0).length
 
-  // planilha da casa: aba do mês anterior ao pagamento do aluguel deste mês (nov → OUT_2026)
-  const sheetTab = rents[0]?.sheetTab ?? sheetTabForPayment(`${month}-05`)
+  // planilha da casa: aba do mês do aluguel (pago entre 10 e 15 → nov → NOV_2026)
+  const sheetTab = rents[0]?.sheetTab ?? sheetTabForPayment(`${month}-15`)
   const [sheetState, setSheetState] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null })
   const cached = readSheetCache(sheetTab)
   const loadSheet = async () => {

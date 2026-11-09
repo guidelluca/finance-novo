@@ -5,8 +5,8 @@
  *
  * Regras combinadas com o usuário:
  *   - O seu gasto da casa no mês = Aluguel + Caixinha da SUA linha.
- *   - O pagamento à imobiliária no começo de um mês confere com a aba do mês ANTERIOR
- *     (aluguel pago em 05/11 ↔ aba OUT_2026).
+ *   - O aluguel é pago entre os dias 10 e 15 e confere com a aba do mesmo mês
+ *     (aluguel pago em 15/11 ↔ aba NOV_2026).
  *   - O que cada morador te manda de Pix deve bater com o TOTAL da linha dele.
  *
  * A resposta fica guardada no aparelho (localStorage): o cálculo do mês é síncrono e usa a última leitura.
@@ -33,13 +33,18 @@ export type HouseSheet = {
   aluguelSumCents: number
 }
 
-/** Aba da planilha que confere com um aluguel pago nesta data: a do mês anterior ("2026-11-05" → "OUT_2026"). */
+/**
+ * Aba da planilha que confere com um aluguel pago nesta data: a do PRÓPRIO mês
+ * (o aluguel de novembro é pago entre 10 e 15/11 → aba NOV_2026).
+ * Pago nos primeiros 5 dias do mês = atraso do mês anterior ("2026-12-02" → NOV_2026).
+ */
 export function sheetTabForPayment(date: string): string {
   const y = Number(date.slice(0, 4))
   const m = Number(date.slice(5, 7)) // 1..12
-  const pm = m === 1 ? 12 : m - 1
-  const py = m === 1 ? y - 1 : y
-  return `${MONTHS[pm - 1]}_${py}`
+  const late = Number(date.slice(8, 10)) <= 5
+  const tm = late ? (m === 1 ? 12 : m - 1) : m
+  const ty = late && m === 1 ? y - 1 : y
+  return `${MONTHS[tm - 1]}_${ty}`
 }
 
 const money = (v: unknown): number => {

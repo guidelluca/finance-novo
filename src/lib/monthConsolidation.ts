@@ -291,7 +291,7 @@ export function consolidateMonth(
   }
 
   // 0c) Aluguel. Duas fontes, uma confere a outra:
-  //     - planilha da casa (aba do mês anterior ao pagamento): seu gasto = Aluguel + Caixinha da SUA linha,
+  //     - planilha da casa (aba do mês do pagamento; aluguel pago entre 10 e 15): seu gasto = Aluguel + Caixinha da SUA linha,
   //       e cada morador deve ter mandado o TOTAL da linha dele;
   //     - banco: R$ 4.316 para a Lanza − Pix dos moradores (+ caixinha digitada à mão) = sua parte.
   //     Com a planilha lida, ela manda; o banco vira conferência.
