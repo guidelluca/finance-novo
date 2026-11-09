@@ -27,6 +27,7 @@ import { parseControleGastosExtrato } from '@/parsers/controleGastosExtrato'
 import { parseItauExtrato } from '@/parsers/itauExtrato'
 import { parseItauExtratoLayout, type BalanceMismatch } from '@/parsers/itauExtratoLayout'
 import { looksLikeInterCsv, parseInterCsv, parseInterPdfLayout } from '@/parsers/inter'
+import { parseMercadoPagoLayout } from '@/parsers/mercadoPagoLayout'
 import { parseMercadoPagoExtrato } from '@/parsers/mercadoPagoExtrato'
 import { parseNubankExtrato } from '@/parsers/nubankExtrato'
 import { extractPdfLayout, extractPdfText } from '@/parsers/pdfText'
@@ -622,6 +623,22 @@ export function ImportPage() {
           setDrafts(enrichDrafts(flagged, ruleRows.filter((x) => x.enabled), categoryRows))
           setStep('review')
           return
+        }
+
+        // extrato de conta Mercado Pago: descrição em 2 linhas em volta da data, valor e saldo por movimento
+        if (parserId === 'mercadopago_extrato_v1') {
+          const mp = parseMercadoPagoLayout(await extractPdfLayout(buf))
+          if (mp.drafts.length > 0) {
+            setLastParserId(parserId)
+            setDetectedBank('Extrato Mercado Pago (conta)')
+            if (mp.holderName && mp.holderName.split(/\s+/).length >= 2 && !user.user_metadata?.owner_name) {
+              void supabase.auth.updateUser({ data: { owner_name: mp.holderName } })
+            }
+            setWarnings(mp.warnings)
+            setDrafts(enrichDrafts(await flagPossibleDuplicates(user.id, mp.drafts), ruleRows.filter((x) => x.enabled), categoryRows))
+            setStep('review')
+            return
+          }
         }
 
         // extrato da conta Banco Inter: datas por extenso, valor e saldo após cada transação
