@@ -91,7 +91,7 @@ export function CasaPage() {
   )
   const paidCount = byMember.filter((m) => m.cents > 0).length
 
-  const mark = async (t: ConsTx, value: 'casa' | 'meu') => {
+  const mark = async (t: ConsTx & { merchant?: string }, value: 'casa' | 'meu') => {
     if (!user) return
     setBusyId(t.id)
     try {
