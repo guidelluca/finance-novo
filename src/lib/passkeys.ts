@@ -97,7 +97,32 @@ export async function signInWithPasskey(): Promise<string | null> {
   const { error } = await auth().signInWithPasskey()
   if (error) return friendlyPasskeyError(error)
   storageSet(ENROLLED_KEY, '1')
+  markUnlocked()
   return null
+}
+
+/** Já se identificou nesta abertura do app (senha ou biometria): não pede de novo até sair dele. */
+const UNLOCKED_KEY = 'finance:unlocked'
+export function markUnlocked() {
+  try {
+    sessionStorage.setItem(UNLOCKED_KEY, '1')
+  } catch {
+    /* ignora */
+  }
+}
+export function clearUnlocked() {
+  try {
+    sessionStorage.removeItem(UNLOCKED_KEY)
+  } catch {
+    /* ignora */
+  }
+}
+export function isUnlocked(): boolean {
+  try {
+    return sessionStorage.getItem(UNLOCKED_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 export async function registerPasskeyOnThisDevice(): Promise<{ error: string | null }> {
@@ -107,6 +132,7 @@ export async function registerPasskeyOnThisDevice(): Promise<{ error: string | n
     return { error: friendlyPasskeyError(error) }
   }
   storageSet(ENROLLED_KEY, '1')
+  if (storageGet(LOCK_KEY) === null) storageSet(LOCK_KEY, '1')
   if (data?.id) {
     const when = new Date().toLocaleDateString('pt-BR')
     await auth().passkey.update({ passkeyId: data.id, friendlyName: `${deviceName()} · ${biometricLabel()} · ${when}` })
@@ -139,4 +165,21 @@ export function promptDismissed(): boolean {
 }
 export function dismissPrompt() {
   storageSet(DISMISSED_KEY, '1')
+}
+
+// ── Bloqueio do app: pede a biometria ao abrir (a sessão continua salva; isto só trava a tela) ──
+const LOCK_KEY = 'finance:app-lock'
+/** Ligado por padrão quando este aparelho já usa passkey. */
+export function appLockEnabled(): boolean {
+  const v = storageGet(LOCK_KEY)
+  if (v === '1') return true
+  if (v === '0') return false
+  return isEnrolledHere()
+}
+export function setAppLockEnabled(on: boolean) {
+  storageSet(LOCK_KEY, on ? '1' : '0')
+}
+/** Desbloqueia confirmando a passkey no servidor (mesma checagem do login). */
+export async function unlockWithPasskey(): Promise<string | null> {
+  return signInWithPasskey()
 }

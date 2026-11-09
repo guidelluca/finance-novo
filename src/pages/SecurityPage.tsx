@@ -6,7 +6,9 @@ import {
   biometricLabel,
   deletePasskey,
   forgetEnrolledHere,
+  appLockEnabled,
   listPasskeys,
+  setAppLockEnabled,
   passkeySupported,
   platformAuthenticatorAvailable,
   registerPasskeyOnThisDevice,
@@ -14,6 +16,7 @@ import {
 } from '@/lib/passkeys'
 
 export function SecurityPage() {
+  const [lockOn, setLockOn] = useState(() => appLockEnabled())
   const [items, setItems] = useState<PasskeyInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -86,6 +89,25 @@ export function SecurityPage() {
               <Fingerprint className="size-4" />
               {busy ? 'Aguardando…' : `Ativar ${label} neste aparelho`}
             </Button>
+          ) : null}
+          {passkeySupported() ? (
+            <label className="flex items-start gap-3 rounded-xl border border-border p-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-5"
+                checked={lockOn}
+                onChange={(e) => {
+                  setAppLockEnabled(e.target.checked)
+                  setLockOn(e.target.checked)
+                }}
+              />
+              <span>
+                <span className="block font-semibold">Pedir {label} ao abrir o app</span>
+                <span className="block text-xs text-muted">
+                  Neste aparelho, o app fica bloqueado ao abrir e quando você volta depois de 3 minutos fora. Precisa ter ativado {label} acima.
+                </span>
+              </span>
+            </label>
           ) : null}
           {msg ? <p className="text-sm text-accent" role="status">{msg}</p> : null}
           {error ? <p className="text-sm text-danger" role="alert">{error}</p> : null}

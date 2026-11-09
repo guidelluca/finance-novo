@@ -1,6 +1,7 @@
 import type { Session, User } from '@supabase/supabase-js'
 import * as React from 'react'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
+import { markUnlocked } from '@/lib/passkeys'
 
 type AuthCtx = {
   user: User | null
@@ -37,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     if (!isSupabaseConfigured) return { error: new Error('Supabase não configurado') }
     const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (!error) markUnlocked()
     return { error: error as Error | null }
   }
 

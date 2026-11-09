@@ -18,6 +18,7 @@ import {
   Upload,
 } from 'lucide-react'
 import { FloatingAiChat } from '@/components/ai/FloatingAiChat'
+import { AppLock } from '@/components/auth/AppLock'
 import { PasskeyPrompt } from '@/components/auth/PasskeyPrompt'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
@@ -94,6 +95,7 @@ export function AppShell() {
         </button>
       </header>
       <main className="mx-auto w-full max-w-lg flex-1 px-4 pt-4">
+        <AppLock />
         <PasskeyPrompt />
         <Outlet />
       </main>
