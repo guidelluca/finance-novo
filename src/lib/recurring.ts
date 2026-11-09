@@ -1,3 +1,4 @@
+import { classifyHouse, type HouseConfig } from '@/lib/house'
 /**
  * Contas recorrentes a partir do histórico (sem dependências de UI):
  * próximas contas do mês e assinaturas detectadas.
@@ -44,7 +45,13 @@ function median(xs: number[]): number {
 }
 
 /** Gastos que se repetem em pelo menos 2 dos 3 meses anteriores com valor parecido (±15%). */
-export function detectRecurring(month: string, monthTxs: ConsTx[], history: ConsTx[], ownerName: string | null = null): Recurring[] {
+export function detectRecurring(
+  month: string,
+  monthTxs: ConsTx[],
+  history: ConsTx[],
+  ownerName: string | null = null,
+  house: HouseConfig | null = null,
+): Recurring[] {
   const fold = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
   const own = ownerName && ownerName.trim().includes(' ') ? fold(ownerName.trim()) : null
   const last3 = [1, 2, 3].map((k) => shiftMonth(month, -k))
@@ -55,6 +62,8 @@ export function detectRecurring(month: string, monthTxs: ConsTx[], history: Cons
     // não são contas: fatura, aplicação/resgate e dinheiro entre suas próprias contas
     if (/pagamento.*fatura|fatura paga|aplica[cç][aã]o|resgate|\brdb\b|\bcdb\b|conta pr[oó]pria/i.test(t.description)) continue
     if (own && fold(t.description).includes(own)) continue
+    // aluguel e contas da casa (república) não são contas suas
+    if (classifyHouse({ id: t.id, description: t.description, kind: t.kind }, house)?.kind === 'casa') continue
     const g = groups.find((gr) => similarMerchant(gr[0]!, t))
     if (g) g.push(t)
     else groups.push([t])

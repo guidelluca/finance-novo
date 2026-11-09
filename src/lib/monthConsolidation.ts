@@ -5,6 +5,7 @@
  *
  * Sem dependências externas (testável isoladamente). Nada é apagado aqui: só classifica.
  */
+import { classifyHouse, type HouseConfig } from '@/lib/house'
 import { identifyMerchant } from './merchantIdentify'
 
 export type TxSource = 'fatura' | 'extrato' | 'csv' | 'print' | 'manual'
@@ -35,7 +36,7 @@ export type ConsItem = ConsTx & {
   ruleKey: string | null
 }
 
-export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento' | 'estorno' | 'linha_invalida' | 'valor_improvavel'
+export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento' | 'estorno' | 'linha_invalida' | 'casa' | 'valor_improvavel'
 
 export type Excluded = { tx: ConsItem; reason: ExcludedReason; relatedId?: string; note: string }
 
@@ -208,6 +209,8 @@ export function consolidateMonth(
   ownerName: string | null = null,
   /** mês financeiro (começa no salário); sem isso, mês do calendário */
   periodOf: (date: string) => string = (d) => d.slice(0, 7),
+  /** finanças da casa (república): aluguel, Pix dos moradores, caixinha — fora dos totais pessoais */
+  house: HouseConfig | null = null,
 ): ConsolidatedMonth {
   const monthOf = periodOf
   const items = monthTxs.filter((t) => monthOf(t.date) === month).map(enrich)
@@ -237,6 +240,16 @@ export function consolidateMonth(
         'Vieram de uma importação antiga do extrato (ex.: “Saldo do Dia”). Já tirei da soma; apague-as. Se o extrato for do Itaú, importe-o de novo: os valores das outras linhas também podem estar trocados.',
       txIds: invalid.map((t) => t.id),
     })
+  }
+
+  // 0b) Dinheiro da casa (você é o tesoureiro): não é renda nem gasto seu
+  for (const t of items) {
+    if (excluded.has(t.id)) continue
+    const h = classifyHouse({ id: t.id, description: t.description, kind: t.kind }, house)
+    if (h?.kind === 'casa') {
+      const why = h.why === 'pagamento' ? `pagamento da casa (${h.who})` : h.why === 'caixinha' ? 'caixinha da casa' : h.why === 'manual' ? 'marcado como da casa' : `${t.kind === 'credit' ? 'recebido de' : 'enviado para'} ${h.who}`
+      exclude(t, 'casa', `Da casa: ${why}`)
+    }
   }
 
   // 1b) Pix/TED para você mesmo (o leitor do extrato marca "conta própria" pelo nome do titular)

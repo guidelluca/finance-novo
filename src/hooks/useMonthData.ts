@@ -2,6 +2,7 @@ import { format } from 'date-fns'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePeriods } from '@/hooks/usePeriods'
+import { readHouse } from '@/lib/house'
 import { shiftMonthKey } from '@/lib/period'
 import { consolidateMonth, type ConsTx, type TxSource } from '@/lib/monthConsolidation'
 import { supabase } from '@/lib/supabase'
@@ -127,6 +128,7 @@ export function useMonthData(month: string) {
         dismissed,
         (user?.user_metadata?.owner_name as string | undefined) ?? null,
         periods.periodOf,
+        readHouse(user),
       ),
     [month, monthTxs, history, dismissed, user, periods],
   )

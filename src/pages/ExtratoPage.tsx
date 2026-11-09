@@ -12,6 +12,7 @@ import { addDaysIso } from '@/lib/period'
 import { parseBRLToCents } from '@/lib/budgets'
 import { formatBRLFromCents } from '@/lib/currency'
 import { normalizeTransactionLogicalDescription, transactionDedupCandidates } from '@/lib/dedupKey'
+import { markHouseTx } from '@/lib/house'
 import { learnRules } from '@/lib/learnRules'
 import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
 import { issueId, shiftMonth, type ExcludedReason } from '@/lib/monthConsolidation'
@@ -32,6 +33,7 @@ const EXCLUDED_LABEL: Record<ExcludedReason, string> = {
   investimento: 'aplicação — não conta',
   estorno: 'estornado — não conta',
   linha_invalida: 'não é lançamento (saldo/cabeçalho) — apague',
+  casa: 'da casa — não conta no seu',
   valor_improvavel: 'valor improvável — confira',
 }
 
@@ -240,6 +242,17 @@ export function ExtratoPage() {
     setOpenId(null)
     setNotice('Lançamento atualizado.')
     reloadAll()
+  }
+
+  /** Da casa (república) × meu: marcação à mão, vale para sempre para este lançamento */
+  const setHouse = async (t: Transaction, value: 'casa' | 'meu') => {
+    if (!user) return
+    try {
+      await markHouseTx(user, t.id, value)
+      setNotice(value === 'casa' ? `${merchantOf(t)}: marcado como da casa (sai dos seus totais).` : `${merchantOf(t)}: marcado como seu.`)
+    } catch (e) {
+      setError(`Não consegui salvar: ${(e as Error).message}`)
+    }
   }
 
   /** "Não é repetida": passa a contar (mesma marcação do Mês consolidado). */
@@ -565,6 +578,25 @@ export function ExtratoPage() {
                       <div className="space-y-3 px-2.5 pb-3">
                         <p className="truncate font-mono text-[11px] text-muted">{t.description_raw}</p>
                         {ex ? <p className="text-xs text-muted">{ex.note}</p> : null}
+                        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-background p-2.5 text-sm">
+                          <span className="text-xs text-muted">Este lançamento é</span>
+                          <Button
+                            size="sm"
+                            variant={ex?.reason === 'casa' ? 'default' : 'secondary'}
+                            onClick={() => void setHouse(t, 'casa')}
+                            aria-pressed={ex?.reason === 'casa'}
+                          >
+                            da casa
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={ex?.reason !== 'casa' ? 'default' : 'secondary'}
+                            onClick={() => void setHouse(t, 'meu')}
+                            aria-pressed={ex?.reason !== 'casa'}
+                          >
+                            meu
+                          </Button>
+                        </div>
                         {ex?.reason === 'valor_improvavel' ? (
                           <div className="flex flex-wrap gap-2 rounded-xl bg-background p-2.5">
                             <p className="w-full text-xs text-muted">Corrija o valor acima e salve, ou confirme que está certo.</p>

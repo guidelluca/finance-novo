@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { HomeDashboard } from '@/components/finance/HomeDashboard'
 import { useCoverage } from '@/hooks/useCoverage'
+import { readHouse } from '@/lib/house'
 import { useMonthData } from '@/hooks/useMonthData'
 import { usePeriods } from '@/hooks/usePeriods'
 import { effectiveTotal, readBudgets } from '@/lib/budgets'
@@ -84,7 +85,7 @@ export function HomePage() {
     const prevStart = periods.rangeOf(prev).start
     const prevTx = history.filter((t) => periods.periodOf(t.date) === prev)
     if (prevTx.length === 0) return null
-    const r = consolidateMonth(prev, prevTx, history.filter((t) => periods.periodOf(t.date) < prev), today, new Set(), null, periods.periodOf)
+    const r = consolidateMonth(prev, prevTx, history.filter((t) => periods.periodOf(t.date) < prev), today, new Set(), (user?.user_metadata?.owner_name as string | undefined) ?? null, periods.periodOf, readHouse(user))
     const offset = (iso: string) => Math.round((Date.parse(`${iso}T12:00:00Z`) - Date.parse(`${prevStart}T12:00:00Z`)) / 86_400_000)
     return r.included
       .filter((t) => t.kind === 'debit' && offset(t.date) < refDay)
@@ -93,7 +94,7 @@ export function HomePage() {
   const delta = prevSoFar ? spentSoFar / prevSoFar - 1 : null
 
   const recurring = useMemo(
-    () => detectRecurring(month, monthTxs, history, (user?.user_metadata?.owner_name as string | undefined) ?? null),
+    () => detectRecurring(month, monthTxs, history, (user?.user_metadata?.owner_name as string | undefined) ?? null, readHouse(user)),
     [month, monthTxs, history, user],
   )
   const upcoming = recurring

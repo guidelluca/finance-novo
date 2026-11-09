@@ -7,6 +7,7 @@ import { MonthSwitcher } from '@/components/ui/month-switcher'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePeriods } from '@/hooks/usePeriods'
+import { readHouse } from '@/lib/house'
 import { formatBRLFromCents } from '@/lib/currency'
 import { learnRules } from '@/lib/learnRules'
 import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
@@ -51,6 +52,7 @@ const REASON_LABEL: Record<string, string> = {
   investimento: 'Aplicações e resgates',
   estorno: 'Estornos (cobrança e devolução)',
   linha_invalida: 'Linhas que não são lançamentos',
+  casa: 'Dinheiro da casa (república)',
   valor_improvavel: 'Valores improváveis (aguardando você)',
 }
 
@@ -167,6 +169,7 @@ export function MonthPage() {
       dismissed,
       (user?.user_metadata?.owner_name as string | undefined) ?? null,
       periods.periodOf,
+      readHouse(user),
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, parserByBatch, catName, month, dismissed, user, periods])

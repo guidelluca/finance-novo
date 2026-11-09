@@ -104,6 +104,8 @@ const screens = [
   { name: '14-inicio-desktop', path: '/', width: 1280, height: 900 },
   { name: '15-cartoes', path: '/cards' },
   { name: '16-categorias', path: '/categories' },
+  { name: '17-casa', path: '/casa' },
+  { name: '18-extrato-casa', path: '/transactions?filtro=dup' },
 ]
 for (const s of screens) {
   try {

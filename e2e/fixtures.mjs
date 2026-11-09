@@ -77,6 +77,10 @@ for (const [s15, sEnd] of [['2026-09-15', '2026-09-29'], ['2026-10-15', '2026-10
   tx(add(s15, 5), 'debit', 2390, 'Compra no débito via NuPay - EBW*Spotify', { account: 'Nubank', category: 'Contas Mensais', batch: 'b-nubank' })
 }
 tx('2026-08-28', 'credit', 331395, 'REMUNERACAO/SALARIO', { category: 'Salário' })
+for (const [d, who, c] of [['2026-10-10', 'VITOR STOLF', 110000], ['2026-10-11', 'LUISA STOLF', 105000], ['2026-11-03', 'VITOR STOLF', 110000], ['2026-11-04', 'LUISA STOLF', 105000]])
+  tx(d, 'credit', c, `Transferência recebida pelo Pix - ${who} - •••.560.608-•• - BANCO INTER (0077)`, { account: 'Nubank', batch: 'b-nubank' })
+tx('2026-11-05', 'credit', 98000, 'PIX TRANSF MARIA C')
+tx('2026-11-06', 'debit', 4600, 'PIX TRANSF ALLAN D')
 tx('2026-11-03', 'debit', 3600, 'MERCADOLIVRE*MERCADOLIV', { account: 'Cartão Itaú', category: 'VR', card: 'card-itau', batch: 'b-fat-itau' })
 tx('2026-11-04', 'debit', 4600, 'PIX TRANSF ALLAN D', {})
 tx('2026-11-05', 'debit', 1890, 'UBER *TRIP', { account: 'Print', category: 'Uber', batch: 'b-print' })
