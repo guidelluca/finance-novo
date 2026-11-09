@@ -5,6 +5,7 @@
  */
 import { ocrScreenshot } from '@/lib/localOcr'
 import { normalizeScreenshotResponse } from '@/parsers/screenshotNormalize'
+import { looksLikeInterFatura, parseInterFaturaPrints } from '@/parsers/interFaturaPrints'
 import { looksLikePicpayFatura, parsePicpayFaturaPrints } from '@/parsers/picpayFaturaPrints'
 import { parseOcrPages, type OcrPage } from '@/parsers/screenshotOcrParse'
 import type { ParseResult, TransactionDraft } from '@/parsers/types'
@@ -49,6 +50,11 @@ export async function parseScreenshotsLocally(
     )
   }
   onProgress?.('Organizando transações…')
+  // tela "Cartões" do Inter (Compras à vista / Parcelamentos): leitor próprio
+  if (looksLikeInterFatura(pages)) {
+    const it = parseInterFaturaPrints(pages, today)
+    if (it.drafts.length > 0) return { ...it, bank: 'Cartão Inter' }
+  }
   // tela "Minhas faturas" do PicPay: leitor próprio (cabeçalho do dia, horário, parcela; junta prints sobrepostos)
   if (looksLikePicpayFatura(pages)) {
     const pp = parsePicpayFaturaPrints(pages, today)
