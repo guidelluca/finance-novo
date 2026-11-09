@@ -7,7 +7,7 @@ import { useMonthData } from '@/hooks/useMonthData'
 import { usePeriods } from '@/hooks/usePeriods'
 import { formatBRLFromCents } from '@/lib/currency'
 import { classifyHouse, markHouseTx, readHouse, saveHouse, type HouseConfig } from '@/lib/house'
-import { shiftMonth, type ConsTx } from '@/lib/monthConsolidation'
+import { RENT_PIX_MIN, shiftMonth, type ConsTx } from '@/lib/monthConsolidation'
 import { cn } from '@/lib/utils'
 
 const d2 = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
@@ -61,22 +61,39 @@ export function CasaPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
-  const casa = useMemo(() => result.excluded.filter((e) => e.reason === 'casa').map((e) => e.tx), [result])
+  // aluguel com parte sua: sai da casa inteiro, e a sua parte entra na casa como contribuição sua
+  const rents = result.rentShares
+  const casa = useMemo(() => {
+    const ex = result.excluded.filter((e) => e.reason === 'casa').map((e) => e.tx)
+    const paid = rents
+      .filter((r) => r.shareCents > 0)
+      .map((r) => result.included.find((t) => t.id === r.txId))
+      .filter((t): t is NonNullable<typeof t> => Boolean(t))
+      .map((t) => ({ ...t, amountCents: rents.find((r) => r.txId === t.id)!.paidCents }))
+    return [...ex, ...paid]
+  }, [result, rents])
+  const myShare = rents.reduce((s, r) => s + Math.max(0, r.shareCents), 0)
   const talvez = useMemo(
     () => result.included.filter((t) => classifyHouse({ id: t.id, description: t.description, kind: t.kind }, house)?.kind === 'talvez'),
     [result, house],
   )
-  const inCents = casa.filter((t) => t.kind === 'credit').reduce((s, t) => s + t.amountCents, 0)
+  const fromMembers = casa.filter((t) => t.kind === 'credit').reduce((s, t) => s + t.amountCents, 0)
+  const inCents = fromMembers + myShare
   const outCents = casa.filter((t) => t.kind === 'debit').reduce((s, t) => s + t.amountCents, 0)
   const net = inCents - outCents
 
-  // saldo acumulado (últimos 6 meses + este): quanto do dinheiro da casa está com você
+  // saldo acumulado (últimos 6 meses + este): quanto do dinheiro da casa está com você.
+  // Nos meses anteriores o aluguel fecha com a sua parte, então só a caixinha e outras contas mexem no saldo.
   const acc = useMemo(() => {
     const seen = new Set(casa.map((t) => t.id))
     let s = net
     for (const t of history as ConsTx[]) {
       if (seen.has(t.id)) continue
-      if (classifyHouse({ id: t.id, description: t.description, kind: t.kind }, house)?.kind === 'casa') s += t.kind === 'credit' ? t.amountCents : -t.amountCents
+      const h = classifyHouse({ id: t.id, description: t.description, kind: t.kind }, house)
+      if (h?.kind !== 'casa') continue
+      if (h.why === 'pagamento' && t.kind === 'debit') continue
+      if (h.why === 'morador' && t.kind === 'credit' && t.amountCents >= RENT_PIX_MIN) continue
+      s += t.kind === 'credit' ? t.amountCents : -t.amountCents
     }
     return s
   }, [history, casa, net, house])
@@ -135,7 +152,7 @@ export function CasaPage() {
         <div>
           <h1 className="text-[30px] font-bold leading-tight tracking-tight">Casa</h1>
           <p className="text-sm text-muted">
-            Dinheiro da {house.name} que passa pela sua conta. Não entra nas suas entradas e saídas.
+            Dinheiro da {house.name} que passa pela sua conta. Só a sua parte do aluguel entra nas suas saídas.
           </p>
         </div>
         <MonthSwitcher
@@ -157,7 +174,7 @@ export function CasaPage() {
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-2xl bg-white/10 p-3">
             <p className="text-xs text-white/70">Recebido dos moradores</p>
-            <p className="text-base font-semibold tabular-nums">{formatBRLFromCents(inCents)}</p>
+            <p className="text-base font-semibold tabular-nums">{formatBRLFromCents(fromMembers)}</p>
           </div>
           <div className="rounded-2xl bg-white/10 p-3">
             <p className="text-xs text-white/70">Pago pela casa</p>
@@ -170,6 +187,33 @@ export function CasaPage() {
             : `Somando os últimos meses, você adiantou ${formatBRLFromCents(-acc)} do seu dinheiro para a casa.`}
         </p>
       </section>
+
+      {rents.map((r) => (
+        <section key={r.txId} className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-base font-semibold">Aluguel de {d2(r.date)}</h2>
+            <span className="text-sm text-muted">{formatBRLFromCents(r.paidCents)}</span>
+          </div>
+          <dl className="space-y-1 text-sm">
+            {r.from.map((f) => (
+              <div key={f.txId} className="flex justify-between gap-3">
+                <dt className="truncate text-muted">
+                  {f.who} · {d2(f.date)}
+                </dt>
+                <dd className="shrink-0 tabular-nums">− {formatBRLFromCents(f.cents)}</dd>
+              </div>
+            ))}
+            <div className="flex justify-between gap-3 border-t border-border pt-1.5 font-semibold">
+              <dt>{r.shareCents >= 0 ? 'Sua parte (conta como seu gasto)' : 'Sobrou com a casa'}</dt>
+              <dd className="shrink-0 tabular-nums">{formatBRLFromCents(Math.abs(r.shareCents))}</dd>
+            </div>
+          </dl>
+          <p className="text-xs text-muted">
+            Só a sua parte entra nas suas saídas do mês. Uso os Pix de cada morador de até 25 dias antes a 10 dias depois do aluguel (a partir de{' '}
+            {formatBRLFromCents(RENT_PIX_MIN)}; menores contam como caixinha).
+          </p>
+        </section>
+      ))}
 
       {notice ? (
         <p role="status" className="rounded-2xl bg-accent-muted p-3 text-sm">

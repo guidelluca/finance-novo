@@ -93,7 +93,21 @@ export type ConsolidatedMonth = {
   incomeByCategory: CategoryGroup[]
   byAccount: { account: string; expenseCents: number; incomeCents: number; count: number }[]
   issues: Issue[]
+  /** aluguel pago à imobiliária: só a sua parte (total − o que os moradores mandaram) conta como gasto seu */
+  rentShares: RentShare[]
 }
+
+export type RentShare = {
+  txId: string
+  date: string
+  paidCents: number
+  receivedCents: number
+  shareCents: number
+  from: { who: string; cents: number; date: string; txId: string }[]
+}
+
+/** Pix de morador abaixo disso é caixinha/rateio de conta, não aluguel */
+export const RENT_PIX_MIN = 30_000
 
 const SOURCE_PRIORITY: Record<TxSource, number> = { fatura: 5, extrato: 4, csv: 3, print: 2, manual: 1 }
 
@@ -124,6 +138,12 @@ function dayDiff(a: string, b: string): number {
   return Math.abs((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000)
 }
 
+
+function shiftIso(iso: string, n: number): string {
+  const d = new Date(`${iso}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
 
 export function shiftMonth(month: string, k: number): string {
   const [y, m] = month.split('-').map(Number) as [number, number]
@@ -249,6 +269,44 @@ export function consolidateMonth(
     if (h?.kind === 'casa') {
       const why = h.why === 'pagamento' ? `pagamento da casa (${h.who})` : h.why === 'caixinha' ? 'caixinha da casa' : h.why === 'manual' ? 'marcado como da casa' : `${t.kind === 'credit' ? 'recebido de' : 'enviado para'} ${h.who}`
       exclude(t, 'casa', `Da casa: ${why}`)
+    }
+  }
+
+  // 0c) Aluguel: a casa paga a imobiliária com o dinheiro dos moradores; o que faltou é a SUA parte.
+  //     Ex.: R$ 4.316 para a Lanza − R$ 3.450 recebidos de Alan, Luísa, Ramon, Vitor e Maria = R$ 866 seu.
+  const rentShares: RentShare[] = []
+  if (house) {
+    const pool = [...hist, ...items]
+      .filter((t) => t.kind === 'credit' && t.amountCents >= RENT_PIX_MIN)
+      .map((t) => ({ t, h: classifyHouse({ id: t.id, description: t.description, kind: t.kind }, house) }))
+      .filter((x) => x.h?.kind === 'casa' && (x.h.why === 'morador' || x.h.why === 'manual'))
+    const used = new Set<string>()
+    const payments = items
+      .filter((t) => t.kind === 'debit' && excluded.get(t.id)?.reason === 'casa')
+      .filter((t) => classifyHouse({ id: t.id, description: t.description, kind: t.kind }, house)?.why === 'pagamento')
+      .sort((a, b) => (a.date < b.date ? -1 : 1))
+    for (const pay of payments) {
+      // Pix dos moradores de até 25 dias antes a 10 dias depois do pagamento, um de cada morador
+      const from: RentShare['from'] = []
+      const seenWho = new Set<string>()
+      const cands = pool
+        .filter(({ t }) => !used.has(t.id) && dayDiff(t.date, pay.date) <= 25 && t.date <= shiftIso(pay.date, 10))
+        .sort((a, b) => dayDiff(a.t.date, pay.date) - dayDiff(b.t.date, pay.date))
+      for (const { t, h } of cands) {
+        if (seenWho.has(h!.who)) continue
+        seenWho.add(h!.who)
+        used.add(t.id)
+        from.push({ who: h!.who, cents: t.amountCents, date: t.date, txId: t.id })
+      }
+      const receivedCents = from.reduce((a, x) => a + x.cents, 0)
+      const shareCents = pay.amountCents - receivedCents
+      rentShares.push({ txId: pay.id, date: pay.date, paidCents: pay.amountCents, receivedCents, shareCents, from })
+      if (shareCents > 0) {
+        // entra nos seus gastos só a diferença, como aluguel
+        excluded.delete(pay.id)
+        const idx = items.indexOf(pay)
+        items[idx] = { ...pay, amountCents: shareCents }
+      }
     }
   }
 
@@ -698,6 +756,7 @@ export function consolidateMonth(
     byCategory,
     incomeByCategory: group(realIncomes, [], false),
     byAccount: [...accMap.values()].sort((a, b) => b.expenseCents - a.expenseCents),
+    rentShares,
     issues: issues.filter((i) => !dismissed.has(i.id)),
   }
 }

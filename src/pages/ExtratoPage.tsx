@@ -142,6 +142,12 @@ export function ExtratoPage() {
 
   // totais sem repetição: pagamento de fatura, transferências entre contas e duplicadas não contam
   const counts = (t: Transaction) => !excludedById.has(t.id)
+  // aluguel da casa: só a sua parte conta (total pago − Pix dos moradores)
+  const rentById = useMemo(() => new Map(cons.result.rentShares.map((r) => [r.txId, r])), [cons.result])
+  const countedCents = (t: Transaction) => {
+    const r = rentById.get(t.id)
+    return r && r.shareCents > 0 ? r.shareCents : t.amount_cents
+  }
   const consReady = !cons.loading && !cons.error
   const income = consReady
     ? cons.result.totals.incomeCents
@@ -530,7 +536,7 @@ export function ExtratoPage() {
       ) : null}
 
       {days.map(([day, list]) => {
-        const net = list.filter(counts).reduce((s, t) => s + (t.kind === 'credit' ? t.amount_cents : -t.amount_cents), 0)
+        const net = list.filter(counts).reduce((s, t) => s + (t.kind === 'credit' ? countedCents(t) : -countedCents(t)), 0)
         return (
           <section key={day} className="space-y-2">
             <div className="flex justify-between px-1.5 text-[13px] text-muted">
@@ -545,6 +551,7 @@ export function ExtratoPage() {
                 const cat = catName.get(t.category_id ?? '') ?? null
                 const open = openId === t.id
                 const ex = excludedById.get(t.id)
+                const rent = rentById.get(t.id)
                 return (
                   <div key={t.id} className={cn(i > 0 && 'border-t border-[#eeefe9] dark:border-[#2b2e34]')}>
                     <button type="button" onClick={() => openRow(t)} aria-expanded={open} className="flex w-full items-center gap-3 px-2.5 py-2.5 text-left">
@@ -554,7 +561,13 @@ export function ExtratoPage() {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{merchantOf(t)}</span>
                         <span className={cn('block truncate text-xs', cat || ex ? 'text-muted' : 'text-warning')}>
-                          {ex ? EXCLUDED_LABEL[ex.reason] : (cat ?? 'Sem categoria')}
+                          {rent
+                            ? rent.shareCents > 0
+                              ? `Sua parte do aluguel · de ${formatBRLFromCents(rent.paidCents)}`
+                              : 'Aluguel da casa · moradores pagaram tudo'
+                            : ex
+                              ? EXCLUDED_LABEL[ex.reason]
+                              : (cat ?? 'Sem categoria')}
                           {(() => {
                             const pm = methodOf(t)
                             return pm.group === 'credito' || pm.label.includes('Cartão')
@@ -571,13 +584,35 @@ export function ExtratoPage() {
                         )}
                       >
                         {t.kind === 'credit' ? '+' : '−'}
-                        {formatBRLFromCents(t.amount_cents)}
+                        {formatBRLFromCents(countedCents(t))}
                       </span>
                     </button>
                     {open && edit ? (
                       <div className="space-y-3 px-2.5 pb-3">
                         <p className="truncate font-mono text-[11px] text-muted">{t.description_raw}</p>
                         {ex ? <p className="text-xs text-muted">{ex.note}</p> : null}
+                        {rent ? (
+                          <div className="space-y-1 rounded-xl bg-background p-2.5 text-xs">
+                            <p className="font-semibold">
+                              Aluguel {formatBRLFromCents(rent.paidCents)} − moradores {formatBRLFromCents(rent.receivedCents)} ={' '}
+                              {rent.shareCents > 0 ? `sua parte ${formatBRLFromCents(rent.shareCents)}` : 'nada para você'}
+                            </p>
+                            {rent.from.length ? (
+                              <ul className="text-muted">
+                                {rent.from.map((f) => (
+                                  <li key={f.txId}>
+                                    {f.who.split(' ')[0]} · {formatBRLFromCents(f.cents)} · {f.date.slice(8)}/{f.date.slice(5, 7)}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-muted">Não achei Pix de moradores perto da data do aluguel.</p>
+                            )}
+                            {rent.shareCents < 0 ? (
+                              <p className="text-muted">Sobrou {formatBRLFromCents(-rent.shareCents)} com a casa (fica no saldo da casa).</p>
+                            ) : null}
+                          </div>
+                        ) : null}
                         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-background p-2.5 text-sm">
                           <span className="text-xs text-muted">Este lançamento é</span>
                           <Button
