@@ -5,6 +5,7 @@
  */
 import { ocrScreenshot } from '@/lib/localOcr'
 import { normalizeScreenshotResponse } from '@/parsers/screenshotNormalize'
+import { looksLikePicpayFatura, parsePicpayFaturaPrints } from '@/parsers/picpayFaturaPrints'
 import { parseOcrPages, type OcrPage } from '@/parsers/screenshotOcrParse'
 import type { ParseResult, TransactionDraft } from '@/parsers/types'
 
@@ -48,6 +49,11 @@ export async function parseScreenshotsLocally(
     )
   }
   onProgress?.('Organizando transações…')
+  // tela "Minhas faturas" do PicPay: leitor próprio (cabeçalho do dia, horário, parcela; junta prints sobrepostos)
+  if (looksLikePicpayFatura(pages)) {
+    const pp = parsePicpayFaturaPrints(pages, today)
+    if (pp.drafts.length > 0) return { ...pp, bank: 'Cartão PicPay' }
+  }
   const { rows } = parseOcrPages(pages, today)
   const norm = normalizeScreenshotResponse({ rows }, today)
   const bank = detectBankFromText(pages.flatMap((p) => p.lines.map((l) => l.text)).join(' '))
