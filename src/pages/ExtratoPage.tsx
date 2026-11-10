@@ -144,9 +144,14 @@ export function ExtratoPage() {
   const counts = (t: Transaction) => !excludedById.has(t.id)
   // aluguel da casa: só a sua parte conta (total pago − Pix dos moradores)
   const rentById = useMemo(() => new Map(cons.result.rentShares.map((r) => [r.txId, r])), [cons.result])
+  // pagamento de fatura com só parte das compras importadas: conta a diferença
+  const faturaById = useMemo(() => new Map(cons.result.faturaChecks.map((f) => [f.txId, f])), [cons.result])
   const countedCents = (t: Transaction) => {
     const r = rentById.get(t.id)
-    return r && r.shareCents > 0 ? r.shareCents : t.amount_cents
+    if (r && r.shareCents > 0) return r.shareCents
+    const f = faturaById.get(t.id)
+    if (f && f.countedCents > 0) return f.countedCents
+    return t.amount_cents
   }
   const consReady = !cons.loading && !cons.error
   const income = consReady
@@ -576,7 +581,11 @@ export function ExtratoPage() {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{merchantOf(t)}</span>
                         <span className={cn('block truncate text-xs', cat || ex ? 'text-muted' : 'text-warning')}>
-                          {rent
+                          {faturaById.get(t.id) && faturaById.get(t.id)!.countedCents > 0
+                            ? faturaById.get(t.id)!.detailedCents > 0
+                              ? `Fatura · ${formatBRLFromCents(faturaById.get(t.id)!.countedCents)} sem detalhe de ${formatBRLFromCents(t.amount_cents)}`
+                              : `Fatura do ${faturaById.get(t.id)!.issuer} · conta inteira (compras não importadas)`
+                            : rent
                             ? rent.shareCents > 0
                               ? `Sua parte do aluguel · de ${formatBRLFromCents(rent.paidCents)}`
                               : 'Aluguel da casa · moradores pagaram tudo'

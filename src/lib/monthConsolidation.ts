@@ -98,6 +98,18 @@ export type ConsolidatedMonth = {
   rentShares: RentShare[]
   /** aluguel do mês tirado da planilha, ainda sem pagamento no extrato (já conta nos gastos) */
   plannedRent: PlannedRent | null
+  /** pagamentos de fatura × compras importadas do mesmo cartão */
+  faturaChecks: FaturaCheck[]
+}
+
+export type FaturaCheck = {
+  txId: string
+  issuer: string
+  paidCents: number
+  /** compras desse cartão importadas para o ciclo */
+  detailedCents: number
+  /** quanto do pagamento conta como gasto (0 = tudo detalhado) */
+  countedCents: number
 }
 
 export type PlannedRent = {
@@ -144,6 +156,30 @@ const SOURCE_PRIORITY: Record<TxSource, number> = { fatura: 5, extrato: 4, csv: 
 
 const CARD_PAYMENT =
   /fatura paga|pagamento (de |da )?fatura|pgto\.? ?fatura|pag(to|amento)? (de )?cart[aã]o|fatura (do |de )?cart[aã]o|itaucard|nu ?pagamentos|pagamento.*\b(nubank|picpay card|cart[aã]o)\b|d[eé]bito autom[aá]tico.*fatura/i
+/** Banco do cartão pelo texto ("FATURA PAGA ITAU PLATINU", conta "Cartão PicPay"). */
+type Issuer = 'itau' | 'nubank' | 'picpay' | 'inter' | 'mercadopago' | 'c6' | 'santander' | 'bradesco'
+const ISSUER_LABEL: Record<Issuer, string> = {
+  itau: 'cartão Itaú',
+  nubank: 'cartão Nubank',
+  picpay: 'cartão PicPay',
+  inter: 'cartão Inter',
+  mercadopago: 'cartão Mercado Pago',
+  c6: 'cartão C6',
+  santander: 'cartão Santander',
+  bradesco: 'cartão Bradesco',
+}
+function issuerOf(text: string): Issuer | null {
+  const t = text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+  if (/itau|itaucard/.test(t)) return 'itau'
+  if (/nubank|nu ?pagamentos|\bnu\b/.test(t)) return 'nubank'
+  if (/picpay/.test(t)) return 'picpay'
+  if (/\binter\b|bancointer/.test(t)) return 'inter'
+  if (/mercado ?pago/.test(t)) return 'mercadopago'
+  if (/\bc6\b/.test(t)) return 'c6'
+  if (/santander/.test(t)) return 'santander'
+  if (/bradesco|bradescard/.test(t)) return 'bradesco'
+  return null
+}
 const INVESTMENT =
   /\b(aplica[cç][aã]o|resgate|rdb|cdb|lci|lca|tesouro direto|poupan[cç]a|caixinha|cofrinho|porquinho|investimento|guardado|guardar dinheiro)\b/i
 /** Teto plausível de um único lançamento por tipo de gasto (acima disso, provavelmente erro de leitura). */
@@ -427,26 +463,53 @@ export function consolidateMonth(
     exclude(t, 'transferencia_interna', t.kind === 'debit' ? 'Pix para outra conta sua' : 'Pix vindo de outra conta sua')
   }
 
-  // 2) Pagamento de fatura do cartão: as compras já entram uma a uma pela fatura
-  const cardTxNearby = [...items, ...hist].some(
-    (t) => isCard(t) && (monthOf(t.date) === month || monthOf(t.date) === shiftMonth(month, -1)),
-  )
+  // 2) Pagamento de fatura do cartão. As compras entram uma a uma pela fatura/prints, então o pagamento
+  //    só sai da soma na medida em que as compras DAQUELE cartão foram importadas:
+  //    - "FATURA PAGA ITAU" só é coberta por compras de cartão Itaú (PicPay/Inter não contam);
+  //    - compras de ~45 a 3 dias antes do pagamento (o ciclo da fatura);
+  //    - importou tudo (≥ 95%): o pagamento não conta; nada: conta inteiro;
+  //      parte: conta só a diferença ("parte sem detalhe") e avisa quanto falta importar.
+  const faturaChecks: FaturaCheck[] = []
   for (const t of items) {
     if (t.kind !== 'debit' || isCard(t) || excluded.has(t.id)) continue
     if (!CARD_PAYMENT.test(t.description)) continue
-    if (cardTxNearby) {
-      exclude(t, 'pagamento_fatura', 'As compras do cartão já estão contadas uma a uma')
-    } else {
-      issues.push({
-        id: issueId('fatura_sem_detalhe', [t.id]),
-        type: 'fatura_sem_detalhe',
-        severity: 'media',
-        title: `Pagamento de fatura de ${brl(t.amountCents)} sem o detalhe das compras`,
-        detail:
-          'Nenhuma compra de cartão foi importada para este período. O pagamento está contado como um gasto único; importe a fatura (PDF ou print) para ver onde foi o dinheiro — aí ele sai da soma sozinho.',
-        txIds: [t.id],
-      })
+    const issuer = issuerOf(t.description)
+    const from = shiftIso(t.date, -45)
+    const to = shiftIso(t.date, -3)
+    const cardTxs = [...items, ...hist].filter(
+      (c) => isCard(c) && c.date >= from && c.date <= to && (!issuer || !c.account || issuerOf(c.account) === issuer) && !/fatura paga|pagamento/i.test(c.description),
+    )
+    const detailedCents = Math.max(
+      0,
+      cardTxs.reduce((a, c) => a + (c.kind === 'debit' ? c.amountCents : -c.amountCents), 0),
+    )
+    const cardName = issuer ? ISSUER_LABEL[issuer] : 'cartão'
+    const ratio = t.amountCents ? detailedCents / t.amountCents : 0
+    if (ratio >= 0.95) {
+      exclude(t, 'pagamento_fatura', `As compras do ${cardName} já estão contadas uma a uma (${brl(detailedCents)} importados)`)
+      faturaChecks.push({ txId: t.id, issuer: cardName, paidCents: t.amountCents, detailedCents, countedCents: 0 })
+      continue
     }
+    const countedCents = t.amountCents - detailedCents
+    faturaChecks.push({ txId: t.id, issuer: cardName, paidCents: t.amountCents, detailedCents, countedCents })
+    if (detailedCents > 0) {
+      const idx = items.indexOf(t)
+      items[idx] = { ...t, amountCents: countedCents }
+    }
+    issues.push({
+      id: issueId('fatura_sem_detalhe', [t.id], String(detailedCents)),
+      type: 'fatura_sem_detalhe',
+      severity: 'media',
+      title:
+        detailedCents > 0
+          ? `Fatura do ${cardName}: faltam ${brl(countedCents)} de compras`
+          : `Pagamento da fatura do ${cardName} (${brl(t.amountCents)}) sem o detalhe das compras`,
+      detail:
+        detailedCents > 0
+          ? `Você pagou ${brl(t.amountCents)}, mas só ${brl(detailedCents)} em compras do ${cardName} foram importadas para esse ciclo. A diferença está contada como "parte sem detalhe"; importe a fatura do ${cardName} (PDF ou prints) e ela sai da soma sozinha.`
+          : `Nenhuma compra do ${cardName} foi importada para esse ciclo, então o pagamento conta inteiro como gasto. Importe a fatura (PDF ou prints) para ver onde foi o dinheiro — aí ele sai da soma sozinho.`,
+      txIds: [t.id],
+    })
   }
 
   // 3) Duplicadas entre fontes (ex.: print + fatura, extrato PDF + CSV)
@@ -866,6 +929,7 @@ export function consolidateMonth(
     byAccount: [...accMap.values()].sort((a, b) => b.expenseCents - a.expenseCents),
     rentShares,
     plannedRent,
+    faturaChecks,
     issues: issues.filter((i) => !dismissed.has(i.id)),
   }
 }
