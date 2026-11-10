@@ -54,3 +54,6 @@ create policy trip_items_all_own on public.trip_items
 drop policy if exists trip_transactions_all_own on public.trip_transactions;
 create policy trip_transactions_all_own on public.trip_transactions
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- avisa a API do Supabase que existem tabelas novas (sem isso o app pode levar alguns minutos para enxergá-las)
+notify pgrst, 'reload schema';

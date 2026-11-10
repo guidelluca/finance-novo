@@ -605,14 +605,24 @@ function FragmentRow({ label, planned, real }: { label: string; planned: number;
 
 function SetupTrips({ onDone }: { onDone: () => void }) {
   const [copied, setCopied] = useState(false)
+  const [checked, setChecked] = useState(0)
+  // projeto Supabase do app (https://<ref>.supabase.co) → link direto para o SQL Editor
+  const ref = (import.meta.env.VITE_SUPABASE_URL ?? '').match(/https:\/\/([a-z0-9]+)\.supabase\.co/)?.[1]
+  const sqlUrl = ref ? `https://supabase.com/dashboard/project/${ref}/sql/new` : 'https://supabase.com/dashboard'
   return (
     <div className="space-y-3.5 pb-24">
       <h1 className="text-[30px] font-bold tracking-tight">Viagens</h1>
       <section className="space-y-3 rounded-3xl border border-border bg-surface p-[18px] text-sm">
         <p className="font-semibold">Falta criar as tabelas de viagens no seu banco (uma vez só).</p>
         <ol className="list-decimal space-y-1 pl-5 text-muted">
-          <li>Abra o Supabase do app → <strong>SQL Editor</strong> → New query.</li>
-          <li>Cole o código abaixo e toque em <strong>Run</strong>.</li>
+          <li>Toque em <strong>Copiar SQL</strong>.</li>
+          <li>
+            Abra o{' '}
+            <a href={sqlUrl} target="_blank" rel="noreferrer" className="font-semibold text-foreground underline">
+              SQL Editor do Supabase
+            </a>{' '}
+            (entre com a sua conta), cole tudo e toque em <strong>Run</strong>. Deve aparecer “Success. No rows returned”.
+          </li>
           <li>Volte aqui e toque em “Já rodei”.</li>
         </ol>
         <div className="flex gap-2">
@@ -625,10 +635,21 @@ function SetupTrips({ onDone }: { onDone: () => void }) {
           >
             {copied ? <Check className="size-4" /> : <Copy className="size-4" />} {copied ? 'Copiado' : 'Copiar SQL'}
           </Button>
-          <Button size="sm" onClick={onDone}>
+          <Button
+            size="sm"
+            onClick={() => {
+              setChecked((n) => n + 1)
+              onDone()
+            }}
+          >
             Já rodei
           </Button>
         </div>
+        {checked ? (
+          <p className="rounded-xl bg-[#fff4ec] p-2.5 text-xs text-[#9a3412] dark:bg-[#2a1d15] dark:text-[#ffb38a]">
+            Ainda não encontrei as tabelas. Confira se o Run terminou com “Success” (se deu erro, me mande o print do erro). Se deu certo, espere 1 minuto e toque em “Já rodei” de novo.
+          </p>
+        ) : null}
         <pre className="max-h-64 overflow-auto rounded-xl bg-background p-3 text-[11px] leading-snug">{tripsSql}</pre>
       </section>
     </div>
