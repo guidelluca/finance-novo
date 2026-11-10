@@ -3,7 +3,10 @@ import { ptBR } from 'date-fns/locale'
 import { Plus, Target } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { GoalPlanPanel } from '@/components/finance/GoalPlanPanel'
 import { Button } from '@/components/ui/button'
+import { useMonthData } from '@/hooks/useMonthData'
+import { usePeriods } from '@/hooks/usePeriods'
 import { useAuth } from '@/contexts/AuthContext'
 import { parseBRLToCents, readGoalDeadlines, saveGoalDeadline } from '@/lib/budgets'
 import { formatBRLFromCents } from '@/lib/currency'
@@ -31,6 +34,17 @@ export function GoalsPage() {
   const [contrib, setContrib] = useState<{ goalId: string; value: string; dir: 'in' | 'out' } | null>(null)
   const [busy, setBusy] = useState(false)
   const deadlines = readGoalDeadlines(user)
+  const [openPlan, setOpenPlan] = useState<string | null>(null)
+  // média dos últimos 3 meses por categoria (sugestões de corte no plano)
+  const periods = usePeriods()
+  const monthData = useMonthData(periods.current)
+  const categoryAverages = useMemo(
+    () =>
+      monthData.result.byCategory
+        .filter((g) => g.categoryId && (g.avg3Cents ?? 0) > 0)
+        .map((g) => ({ name: g.name, avgCents: g.avg3Cents ?? 0 })),
+    [monthData.result],
+  )
 
   const load = useCallback(async () => {
     if (!user) return
@@ -56,6 +70,18 @@ export function GoalsPage() {
   }, [entries])
   const totalSaved = [...saved.values()].reduce((s, v) => s + v, 0)
   const thisMonth = format(new Date(), 'yyyy-MM')
+  const savedThisMonth = (goalId: string) =>
+    entries.filter((e) => e.goal_id === goalId && e.date.startsWith(thisMonth)).reduce((s, e) => s + e.amount_cents, 0)
+  const panel = (g: Goal) => (
+    <GoalPlanPanel
+      goal={g}
+      deadline={deadlines[g.id] ?? null}
+      savedCents={saved.get(g.id) ?? 0}
+      savedThisMonthCents={savedThisMonth(g.id)}
+      today={periods.today}
+      categoryAverages={categoryAverages}
+    />
+  )
   const monthIn = entries.filter((e) => e.date.startsWith(thisMonth) && e.amount_cents > 0).reduce((s, e) => s + e.amount_cents, 0)
 
   // meta principal: a que tem prazo mais próximo; senão a de maior alvo
@@ -233,6 +259,13 @@ export function GoalsPage() {
         )
       })() : null}
 
+      {main ? (
+        <section className="space-y-2 rounded-3xl border border-border bg-surface p-[18px]">
+          <h2 className="text-base font-semibold">Plano · {main.name}</h2>
+          {panel(main)}
+        </section>
+      ) : null}
+
       {others.length ? (
         <section className="space-y-2.5">
           {others.map((g, i) => {
@@ -260,6 +293,10 @@ export function GoalsPage() {
                   </div>
                 ) : null}
                 {contribForm(g)}
+                <button type="button" className="text-xs font-semibold underline" onClick={() => setOpenPlan(openPlan === g.id ? null : g.id)}>
+                  {openPlan === g.id ? 'Esconder plano' : 'Ver plano'}
+                </button>
+                {openPlan === g.id ? panel(g) : null}
               </div>
             )
           })}
