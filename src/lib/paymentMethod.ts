@@ -4,6 +4,7 @@
  */
 export type MethodGroup =
   | 'pix'
+  | 'vr'
   | 'credito'
   | 'debito'
   | 'boleto'
@@ -28,6 +29,7 @@ const CARD_ACCOUNT = /^cart[aã]o\b|cr[eé]dito/i
 
 export const GROUP_LABEL: Record<MethodGroup, string> = {
   pix: 'Pix',
+  vr: 'VR (Alelo)',
   credito: 'Crédito',
   debito: 'Débito',
   boleto: 'Boleto',
@@ -50,6 +52,8 @@ export function paymentMethodOf(
   cards?: Map<string, CardInfo>,
 ): PaymentMethod {
   const d = t.description
+  // vale-refeição: tudo que veio do extrato do Alelo (compras e o crédito do benefício)
+  if (/alelo|\bvr\b|vale.?refei/i.test(t.account ?? '')) return { group: 'vr', key: 'vr', label: GROUP_LABEL.vr }
   // compra no cartão de crédito: veio de fatura (ligada a um cartão ou conta "Cartão …")
   if (t.cardId || CARD_ACCOUNT.test(t.account ?? '')) {
     const card = t.cardId ? cards?.get(t.cardId) : undefined

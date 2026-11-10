@@ -6,6 +6,7 @@
 import { ocrScreenshot } from '@/lib/localOcr'
 import { normalizeScreenshotResponse } from '@/parsers/screenshotNormalize'
 import { looksLikeInterFatura, parseInterFaturaPrints } from '@/parsers/interFaturaPrints'
+import { looksLikeAleloExtrato, parseAleloPrints } from '@/parsers/aleloPrints'
 import { looksLikePicpayFatura, parsePicpayFaturaPrints } from '@/parsers/picpayFaturaPrints'
 import { parseOcrPages, type OcrPage } from '@/parsers/screenshotOcrParse'
 import type { ParseResult, TransactionDraft } from '@/parsers/types'
@@ -54,6 +55,11 @@ export async function parseScreenshotsLocally(
   if (looksLikeInterFatura(pages)) {
     const it = parseInterFaturaPrints(pages, today)
     if (it.drafts.length > 0) return { ...it, bank: 'Cartão Inter' }
+  }
+  // extrato do app Alelo (VR): leitor próprio
+  if (looksLikeAleloExtrato(pages)) {
+    const al = parseAleloPrints(pages, today)
+    if (al.drafts.length > 0) return { ...al, bank: 'VR Alelo' }
   }
   // tela "Minhas faturas" do PicPay: leitor próprio (cabeçalho do dia, horário, parcela; junta prints sobrepostos)
   if (looksLikePicpayFatura(pages)) {

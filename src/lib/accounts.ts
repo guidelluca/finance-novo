@@ -13,6 +13,7 @@ export const DEFAULT_ACCOUNTS: TrackedAccount[] = [
   { id: 'picpay-cartao', name: 'Cartão PicPay', kind: 'cartao' },
   { id: 'inter', name: 'Banco Inter', kind: 'conta' },
   { id: 'inter-cartao', name: 'Cartão Inter', kind: 'cartao' },
+  { id: 'alelo', name: 'VR Alelo', kind: 'conta' },
 ]
 
 const fold = (s: string) =>
