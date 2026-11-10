@@ -16,6 +16,7 @@ import { CasaPage } from '@/pages/CasaPage'
 import { HomePage } from '@/pages/HomePage'
 import { BudgetPage } from '@/pages/BudgetPage'
 import { GoalsPage } from '@/pages/GoalsPage'
+import { TripsPage } from '@/pages/TripsPage'
 import { SecurityPage } from '@/pages/SecurityPage'
 import { RulesPage } from '@/pages/RulesPage'
 import { SavingsPage } from '@/pages/SavingsPage'
@@ -62,6 +63,8 @@ function AppRoutes() {
             <Route path="mes" element={<MonthPage />} />
             <Route path="fechamento" element={<FechamentoPage />} />
             <Route path="casa" element={<CasaPage />} />
+            <Route path="viagens" element={<TripsPage />} />
+            <Route path="viagens/:id" element={<TripsPage />} />
             <Route path="seguranca" element={<SecurityPage />} />
             <Route path="analysis" element={<FinanceAnalysisPage />} />
             <Route path="cards" element={<CardsPage />} />
