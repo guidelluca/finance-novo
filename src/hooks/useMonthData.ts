@@ -87,6 +87,13 @@ export function useMonthData(month: string) {
     void load()
   }, [load])
 
+  // categorização automática terminou em segundo plano: recarrega
+  useEffect(() => {
+    const on = () => void load()
+    window.addEventListener('finance:recategorized', on)
+    return () => window.removeEventListener('finance:recategorized', on)
+  }, [load])
+
   // planilha da casa lida (ou relida) em outra tela: recalcula o mês
   const [sheetVersion, setSheetVersion] = useState(0)
   useEffect(() => {

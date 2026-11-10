@@ -58,7 +58,7 @@ export function HomePage() {
   const closingMonth = shiftMonth(periods.current, -1)
   const closing = useCoverage(closingMonth)
   const closingMissing = closing.coverage.filter((c) => c.status === 'falta' || c.status === 'parcial')
-  const { loading, error, result, monthTxs, history, range, dismissed } = useMonthData(month)
+  const { loading, error, result, monthTxs, history, range, dismissed, categories } = useMonthData(month)
   const budgets = readBudgets(user)
 
   const isCurrent = month === periods.current
@@ -334,6 +334,7 @@ export function HomePage() {
           refDay={refDay}
           dismissed={dismissed}
           today={today}
+          categories={categories}
         />
       ) : null}
 

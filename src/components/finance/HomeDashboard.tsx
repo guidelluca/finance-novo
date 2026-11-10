@@ -2,7 +2,7 @@ import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useAuth } from '@/contexts/AuthContext'
 import { useChartTheme } from '@/hooks/useChartTheme'
 import { formatBRLFromCents } from '@/lib/currency'
@@ -26,6 +26,8 @@ type Props = {
   refDay: number
   dismissed: Set<string>
   today: string
+  /** categorias (com parent_id) para juntar subcategorias na categoria-mãe */
+  categories?: { id: string; name: string; parent_id: string | null }[]
 }
 
 const money = (c: number) => formatBRLFromCents(c)
@@ -59,7 +61,7 @@ function Section({ title, subtitle, children, action }: { title: string; subtitl
   )
 }
 
-export function HomeDashboard({ month, result, monthTxs, history, periods, range, isCurrent, refDay, dismissed, today }: Props) {
+export function HomeDashboard({ month, result, monthTxs, history, periods, range, isCurrent, refDay, dismissed, today, categories = [] }: Props) {
   const { user } = useAuth()
   const ct = useChartTheme()
   const [cards, setCards] = useState<Map<string, CardInfo>>(new Map())
@@ -154,16 +156,49 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
     }
   }, [result, cards])
 
-  // categorias (top 7 + outras) e estabelecimentos
-  const cats = useMemo(() => {
-    const list = result.byCategory.filter((g) => g.totalCents > 0)
-    const top = list.slice(0, 7)
-    const rest = list.slice(7).reduce((s, g) => s + g.totalCents, 0)
-    const rows = top.map((g) => ({ name: g.name, cents: g.totalCents, share: g.share, avg: g.avg3Cents, id: g.categoryId }))
-    if (rest > 0) rows.push({ name: 'Outras', cents: rest, share: rest / Math.max(1, result.totals.expenseCents), avg: null, id: null })
-    return rows
-  }, [result])
-  const maxCat = Math.max(1, ...cats.map((c) => c.cents))
+  // categorias: subcategorias somadas na categoria-mãe (Alimentação = Mercado + Restaurante + Bar + iFood…)
+  const [drill, setDrill] = useState<string | null>(null)
+  const catTree = useMemo(() => {
+    const byId = new Map(categories.map((c) => [c.id, c]))
+    const topOf = (id: string) => {
+      let c = byId.get(id)
+      for (let i = 0; c?.parent_id && byId.has(c.parent_id) && i < 5; i++) c = byId.get(c.parent_id)
+      return c ?? null
+    }
+    type Node = { key: string; id: string | null; name: string; cents: number; avg: number | null; children: { key: string; id: string | null; name: string; cents: number }[] }
+    const groups = new Map<string, Node>()
+    for (const g of result.byCategory) {
+      if (g.totalCents <= 0) continue
+      const top = g.categoryId ? topOf(g.categoryId) : null
+      const key = top?.id ?? g.categoryId ?? 'none'
+      const node = groups.get(key) ?? { key, id: top?.id ?? g.categoryId, name: top?.name ?? g.name, cents: 0, avg: 0, children: [] }
+      node.cents += g.totalCents
+      node.avg = node.avg != null && g.avg3Cents != null ? node.avg + g.avg3Cents : null
+      node.children.push({
+        key: g.categoryId ?? 'none',
+        id: g.categoryId,
+        name: top && g.categoryId === top.id ? `${top.name} (sem subcategoria)` : g.name,
+        cents: g.totalCents,
+      })
+      groups.set(key, node)
+    }
+    return [...groups.values()].sort((a, b) => b.cents - a.cents)
+  }, [result, categories])
+  const drillNode = drill ? (catTree.find((n) => n.key === drill) ?? null) : null
+  const slices = useMemo(() => {
+    const base = drillNode
+      ? [...drillNode.children].sort((a, b) => b.cents - a.cents).map((c) => ({ ...c, avg: null as number | null, hasChildren: false }))
+      : catTree.map((n) => ({ key: n.key, id: n.id, name: n.name, cents: n.cents, avg: n.avg || null, hasChildren: n.children.length > 1 }))
+    const total = base.reduce((a, c) => a + c.cents, 0) || 1
+    // cor fixa por posição no ranking desta vista; a partir da 7.ª, tudo em "Outras" (cinza)
+    const top = base.slice(0, 6).map((c, i) => ({ ...c, share: c.cents / total, color: `var(--series-${i + 1})` }))
+    const rest = base.slice(6)
+    if (rest.length) {
+      const cents = rest.reduce((a, c) => a + c.cents, 0)
+      top.push({ key: 'outras', id: null, name: `Outras (${rest.length})`, cents, avg: null, hasChildren: false, share: cents / total, color: 'var(--series-muted)' })
+    }
+    return { rows: top, total }
+  }, [catTree, drillNode])
 
   const merchants = useMemo(() => {
     const m = new Map<string, { name: string; cents: number; n: number }>()
@@ -256,50 +291,99 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
         </div>
       </Section>
 
-      {/* Categorias */}
+      {/* Categorias: pizza com % de cada categoria; toque numa categoria-mãe para ver as subcategorias */}
       <Section
-        title="Para onde foi"
-        subtitle={`${money(spent)} em gastos, por categoria`}
+        title={drillNode ? drillNode.name : 'Para onde foi'}
+        subtitle={
+          drillNode
+            ? `${money(drillNode.cents)} · ${Math.round((drillNode.cents / Math.max(1, spent)) * 100)}% dos seus gastos, por subcategoria`
+            : `${money(spent)} em gastos, % por categoria`
+        }
         action={
-          <Link to="/orcamento" className="text-sm font-semibold underline">
-            Orçamento
-          </Link>
+          drillNode ? (
+            <button type="button" onClick={() => setDrill(null)} className="text-sm font-semibold underline">
+              ← Todas
+            </button>
+          ) : (
+            <Link to="/orcamento" className="text-sm font-semibold underline">
+              Orçamento
+            </Link>
+          )
         }
       >
-        <ul className="space-y-2.5">
-          {cats.map((c) => (
-            <li key={c.name}>
-              <Link
-                to={
-                  c.id
-                    ? `/transactions?month=${month}&category=${encodeURIComponent(c.name)}`
-                    : c.name === 'Sem categoria'
-                      ? `/transactions?month=${month}&category=none`
-                      : `/transactions?month=${month}`
-                }
-                className="block space-y-1"
-              >
-                <div className="flex items-baseline justify-between gap-2 text-sm">
-                  <span className="truncate font-medium">{c.name}</span>
-                  <span className="shrink-0 tabular-nums">
-                    {money(c.cents)} <span className="text-xs text-muted">· {Math.round(c.share * 100)}%</span>
-                  </span>
-                </div>
-                <div className="h-2 rounded-full bg-background">
-                  <div className="h-2 rounded-full bg-[var(--series-1)]" style={{ width: `${Math.max(2, (c.cents / maxCat) * 100)}%` }} />
-                </div>
-                {c.id === null && c.name === 'Sem categoria' ? (
-                  <p className="text-[11px] font-semibold text-warning">Toque para categorizar</p>
-                ) : c.avg ? (
-                  <p className={cn('text-[11px]', c.cents > c.avg * 1.2 ? 'text-danger' : 'text-muted')}>
-                    média 3 meses {money(c.avg)}
-                    {c.cents > c.avg * 1.2 ? ` · ${Math.round((c.cents / c.avg - 1) * 100)}% acima` : ''}
-                  </p>
-                ) : null}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        {slices.rows.length === 0 ? (
+          <p className="text-sm text-muted">Sem gastos neste mês.</p>
+        ) : (
+          <div className="grid items-center gap-4 sm:grid-cols-[200px_1fr]">
+            <div className="relative mx-auto h-[200px] w-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={slices.rows}
+                    dataKey="cents"
+                    nameKey="name"
+                    innerRadius={62}
+                    outerRadius={96}
+                    paddingAngle={slices.rows.length > 1 ? 1.5 : 0}
+                    stroke="var(--color-surface, #fff)"
+                    strokeWidth={2}
+                    isAnimationActive={false}
+                    onClick={(d: unknown) => {
+                      const p = (d as { payload?: { key?: string; hasChildren?: boolean } } | null)?.payload
+                      if (!drillNode && p?.hasChildren && p.key) setDrill(p.key)
+                    }}
+                  >
+                    {slices.rows.map((r) => (
+                      <Cell key={r.key} fill={r.color} className={cn(!drillNode && r.hasChildren && 'cursor-pointer')} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(v: unknown, n: unknown) => [
+                      typeof v === 'number' ? `${money(v)} · ${Math.round((v / slices.total) * 100)}%` : '—',
+                      String(n),
+                    ]}
+                    contentStyle={tooltipStyle}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                <span className="text-[11px] text-muted">{drillNode ? drillNode.name : 'Gastos'}</span>
+                <span className="text-base font-semibold tabular-nums">{short(slices.total)}</span>
+              </div>
+            </div>
+            <ul className="space-y-1.5">
+              {slices.rows.map((c) => (
+                <li key={c.key} className="flex items-center gap-2.5 text-sm">
+                  <span className="size-3 shrink-0 rounded-full" style={{ background: c.color }} aria-hidden />
+                  {c.hasChildren && !drillNode ? (
+                    <button type="button" onClick={() => setDrill(c.key)} className="min-w-0 flex-1 truncate text-left font-medium underline-offset-2 hover:underline">
+                      {c.name} <span className="text-muted">›</span>
+                    </button>
+                  ) : (
+                    <Link
+                      to={
+                        c.key === 'none'
+                          ? `/transactions?month=${month}&category=none`
+                          : c.id && c.key !== 'outras'
+                            ? `/transactions?month=${month}&category=${encodeURIComponent(c.name.replace(/ \(sem subcategoria\)$/, ''))}`
+                            : `/transactions?month=${month}`
+                      }
+                      className="min-w-0 flex-1 truncate font-medium"
+                    >
+                      {c.name}
+                      {c.key === 'none' ? <span className="ml-1 text-[11px] font-semibold text-warning">· categorizar</span> : null}
+                    </Link>
+                  )}
+                  <span className="shrink-0 font-semibold tabular-nums">{Math.round(c.share * 100)}%</span>
+                  <span className="w-[86px] shrink-0 text-right text-xs tabular-nums text-muted">{money(c.cents)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {!drillNode && catTree.some((n) => n.children.length > 1) ? (
+          <p className="text-[11px] text-muted">Toque numa categoria com › (como Alimentação) para ver as subcategorias.</p>
+        ) : null}
       </Section>
 
       {/* Forma de pagamento */}

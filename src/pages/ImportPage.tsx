@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
-import { suggestCategoryId } from '@/lib/rulesEngine'
+import { loadMerchantMemory, suggestCategory, type MerchantMemory } from '@/lib/categorize'
 import { supabase } from '@/lib/supabase'
 import {
   ensureCategoriesForImportHints,
@@ -34,7 +34,7 @@ import { extractPdfLayout, extractPdfText } from '@/parsers/pdfText'
 import { draftsFromVisionResult } from '@/parsers/screenshotAi'
 import { parseScreenshotsLocally } from '@/parsers/screenshotLocal'
 import { parseFaturaCartao } from '@/parsers/faturaCartao'
-import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
+import { identifyMerchant } from '@/lib/merchantIdentify'
 import { learnRules } from '@/lib/learnRules'
 import type { ParserId, TransactionDraft } from '@/parsers/types'
 import type { Category, ImportBatch, ImportFile, Rule } from '@/types/database'
@@ -139,6 +139,9 @@ function runParse(parserId: ParserId, text: string) {
  * regras do usuário → estabelecimento identificado → categoria impressa pelo banco.
  * `hintFirst`: a coluna Categoria do CSV é do próprio usuário, então vem antes de tudo.
  */
+/** Categoria que você mais usou em cada estabelecimento (carregada ao abrir a tela). */
+let merchantMemory: MerchantMemory = new Map()
+
 function enrichDrafts(
   drafts: TransactionDraft[],
   enabledRules: Rule[],
@@ -147,13 +150,13 @@ function enrichDrafts(
 ): TransactionDraft[] {
   return drafts.map((d) => {
     const m = identifyMerchant(d.descriptionRaw, d.cityHint)
-    const fromRules = suggestCategoryId(d.descriptionRaw, enabledRules)
     const fromHint = resolveImportCategoryHint(d.categoryHint, categories)
-    const fromMerchant = pickCategoryId(m.categories, categories)
-    const auto =
-      (opts.hintFirst ? (fromHint ?? fromRules ?? fromMerchant) : (fromRules ?? fromMerchant ?? fromHint)) ??
-      d.categoryId ??
-      null
+    // regra aprendida → estabelecimento → o que você já usou nesse lugar → regras gerais → banco → VR
+    const smart = suggestCategory(
+      { description: d.descriptionRaw, account: d.accountHint ?? null, hint: null },
+      { rules: enabledRules, categories, memory: merchantMemory },
+    ).categoryId
+    const auto = (opts.hintFirst ? (fromHint ?? smart) : (smart ?? fromHint)) ?? d.categoryId ?? null
     return {
       ...d,
       merchantName: m.name,
@@ -300,6 +303,14 @@ interface ShotItem {
 
 export function ImportPage() {
   const { user } = useAuth()
+  useEffect(() => {
+    if (!user) return
+    loadMerchantMemory(user.id)
+      .then((m) => {
+        merchantMemory = m
+      })
+      .catch(() => undefined)
+  }, [user])
   const [file, setFile] = useState<File | null>(null)
   const selectedFile = file
   const [parserFallback, setParserFallback] = useState<ParserId | 'auto'>('auto')

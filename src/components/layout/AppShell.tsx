@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { seedDefaultCategoriesIfEmpty, seedDefaultRulesIfEmpty } from '@/lib/seedCategories'
+import { autoCategorizeExisting, ensureFoodTree } from '@/lib/categorize'
 import { cn } from '@/lib/utils'
 
 type NavItem = { to: string; icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; label: string }
@@ -65,6 +66,12 @@ export function AppShell() {
       try {
         await seedDefaultCategoriesIfEmpty(user.id)
         await seedDefaultRulesIfEmpty(user.id)
+        // uma vez: Alimentação com subcategorias + categoriza o que está sem categoria / reorganiza comida
+        if (await ensureFoodTree(user)) {
+          const since = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10)
+          const r = await autoCategorizeExisting(user.id, since)
+          if (r.filled || r.moved) window.dispatchEvent(new CustomEvent('finance:recategorized', { detail: r }))
+        }
       } catch (e) {
         console.error(e)
       }

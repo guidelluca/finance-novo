@@ -22,10 +22,11 @@ export type MerchantInfo = {
 
 type Cat = readonly string[]
 const C = {
-  delivery: ['Ifood', 'Delivery', 'Restaurantes', 'Alimentação'],
-  restaurante: ['Restaurantes', 'Alimentação', 'Lanche'],
-  lanche: ['Lanche', 'Restaurantes', 'Alimentação'],
-  bar: ['Lazer', 'Restaurantes', 'Bares'],
+  delivery: ['Ifood', 'iFood', 'Delivery', 'Restaurantes', 'Alimentação'],
+  restaurante: ['Restaurantes', 'Restaurante', 'Alimentação', 'Lanche'],
+  lanche: ['Lanche', 'Lanche e café', 'Café', 'Restaurantes', 'Alimentação'],
+  padaria: ['Padaria', 'Lanche', 'Lanche e café', 'Alimentação'],
+  bar: ['Bar', 'Bares', 'Restaurantes', 'Lazer', 'Alimentação'],
   mercado: ['Mercado', 'Supermercado', 'Alimentação'],
   appTransporte: ['Uber', 'Transporte'],
   transportePublico: ['Transporte', 'Ônibus', 'Transporte público'],
@@ -139,8 +140,12 @@ const KNOWN: { re: RegExp; name: string | ((m: RegExpMatchArray) => string); kin
   { re: /POSTO|SHELL|IPIRANGA|PETROBRAS|\bBR\s?MANIA|COMBUST/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Combustível', categories: C.combustivel },
   { re: /ESTACION|ESTAPAR|ZONA\s?AZUL|SEM\s?PARAR|CONECTCAR|VELOE|PEDAGIO|PED[AÁ]GIO/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Estacionamento / pedágio', categories: C.estacionamento },
   // Comida
-  { re: /PIZZ|BURG|HAMBURG|SUSHI|TEMAKI|CHURRASC|RESTAUR|LANCHONET|\bBAR\b|BOTECO|CHOPP|CERVEJ|EMP[OÓ]RIO|SALAD|BISTR[OÔ]|CANTINA|GRILL|STEAK|TAQUERIA|AÇA[IÍ]|ACAI|SORVET|GELAT|DOCERIA|CONFEITAR|PADARIA|PANIFIC|CAF[EÉ]\b|COFFEE|STARBUCKS|SUCOS?\b|LANCHES|PASTEL|ESPETO|RANGO|ALIMENT|\bREST(A|AU)?$/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Comer fora', categories: C.restaurante },
-  { re: /MCDONALD|MC\s?DONALDS|BURGER\s?KING|\bBK\b|SUBWAY|HABIB|GIRAFFAS|OUTBACK|SPOLETO|CHINA\s?IN\s?BOX|KFC|POPEYES|COCO\s?BAMBU|MADERO/i, name: (m) => titleCase(m[0]!), kind: 'Comer fora', categories: C.restaurante },
+  // Comer fora, separado: bar → padaria → café/lanche → restaurante (a ordem importa: "BAR E CAFE" é bar)
+  { re: /\bBAR\b|BOTECO|CHOPP|CERVEJ|\bPUB\b|ADEGA|TABACARIA|ESPETO|BOTEQUIM|\bBEER\b|BREWING|DRINKS?\b/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Bar', categories: C.bar },
+  { re: /PADARIA|PANIFIC|PADOCA|\bP[AÃ]ES\b/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Padaria', categories: C.padaria },
+  { re: /CAF[EÉ]\b|CAFETERIA|COFFEE|KOFFIE|STARBUCKS|SUCOS?\b|AÇA[IÍ]|ACAI|SORVET|GELAT|DOCERIA|CONFEITAR|BRIGADEIR|PASTEL|LANCHONET|LANCHES?\b|SALGAD|COXINHA|CHURROS|DONUTS?/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Café / lanche', categories: C.lanche },
+  { re: /PIZZ|BURG|HAMBURG|SUSHI|TEMAKI|JAPONES|CHURRASC|RESTAUR|EMP[OÓ]RIO|SALAD|BISTR[OÔ]|CANTINA|GRILL|STEAK|TAQUERIA|RANGO|ALIMENT|COZINHA|TRATTORIA|OSTERIA|PARRILLA|POKE|RAMEN|ESFIH|MASSAS|\bREST(A|AU)?\b|COMIDA/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Restaurante', categories: C.restaurante },
+  { re: /MCDONALD|MC\s?DONALDS|BURGER\s?KING|\bBK\b|SUBWAY|HABIB|GIRAFFAS|OUTBACK|SPOLETO|CHINA\s?IN\s?BOX|KFC|POPEYES|COCO\s?BAMBU|MADERO/i, name: (m) => titleCase(m[0]!), kind: 'Restaurante', categories: C.restaurante },
   // Roupas
   { re: /RENNER|RIACHUELO|\bC\s?&\s?A\b|\bCEA\b|ZARA|HERING|ADIDAS|NIKE|CENTAURO|NETSHOES|DECATHLON|YOUCOM|MARISA|PERNAMBUC/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Roupas / calçados', categories: C.roupas },
   // Lazer
