@@ -90,6 +90,108 @@ export interface Database {
         }
         Relationships: []
       }
+      trips: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          destination: string | null
+          start_date: string | null
+          end_date: string | null
+          budget_cents: number | null
+          keywords: string[]
+          notes: string | null
+          archived: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          destination?: string | null
+          start_date?: string | null
+          end_date?: string | null
+          budget_cents?: number | null
+          keywords?: string[]
+          notes?: string | null
+          archived?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          destination?: string | null
+          start_date?: string | null
+          end_date?: string | null
+          budget_cents?: number | null
+          keywords?: string[]
+          notes?: string | null
+          archived?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      trip_items: {
+        Row: {
+          id: string
+          user_id: string
+          trip_id: string
+          category: string
+          description: string
+          amount_cents: number
+          installments: number
+          first_date: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          trip_id: string
+          category?: string
+          description: string
+          amount_cents: number
+          installments?: number
+          first_date?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          trip_id?: string
+          category?: string
+          description?: string
+          amount_cents?: number
+          installments?: number
+          first_date?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      trip_transactions: {
+        Row: {
+          trip_id: string
+          transaction_id: string
+          user_id: string
+          item_id: string | null
+          created_at: string
+        }
+        Insert: {
+          trip_id: string
+          transaction_id: string
+          user_id: string
+          item_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          trip_id?: string
+          transaction_id?: string
+          user_id?: string
+          item_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       credit_cards: {
         Row: {
           id: string
