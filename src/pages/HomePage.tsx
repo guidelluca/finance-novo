@@ -14,6 +14,8 @@ import { formatBRLFromCents } from '@/lib/currency'
 import { consolidateMonth, shiftMonth } from '@/lib/monthConsolidation'
 import { detectRecurring } from '@/lib/recurring'
 import { cn } from '@/lib/utils'
+import { ListSkeleton } from '@/components/ui/skeleton'
+import { useCountUp } from '@/hooks/useCountUp'
 
 /** Cores dos ícones de categoria (tons claros + texto escuro, legíveis nos dois temas) */
 const TILES = [
@@ -125,7 +127,9 @@ export function HomePage() {
     null
 
   const recent = [...result.included].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 4)
-  const [whole, cents] = splitMoney(result.totals.netCents)
+  // o número do mês conta até o valor quando a tela abre ou o mês muda
+  const animatedNet = useCountUp(loading ? 0 : result.totals.netCents)
+  const [whole, cents] = splitMoney(animatedNet)
   const monthName = format(parseISO(`${month}-01`), 'LLLL', { locale: ptBR })
 
   return (
@@ -161,7 +165,7 @@ export function HomePage() {
             <p className="font-display text-[42px] font-bold leading-none tracking-[-1px]">
               {loading ? '…' : (
                 <>
-                  {result.totals.netCents < 0 ? '−' : ''}
+                  {animatedNet < 0 ? '−' : ''}
                   {whole}
                   <span className="text-2xl text-[#b9bdb4]">{cents}</span>
                 </>
@@ -346,7 +350,12 @@ export function HomePage() {
             Extrato
           </Link>
         </div>
-        {recent.length === 0 ? <p className="px-3 pb-3 text-sm text-muted">{loading ? 'Carregando…' : 'Nada por aqui ainda.'}</p> : null}
+        {recent.length === 0 ? <p className="px-3 pb-3 text-sm text-muted">{loading ? '' : 'Nada por aqui ainda.'}</p> : null}
+        {loading && recent.length === 0 ? (
+          <div className="px-3 pb-3">
+            <ListSkeleton rows={4} />
+          </div>
+        ) : null}
         {recent.map((t) => (
           <div key={t.id} className="flex items-center gap-3 px-3 py-2.5">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl font-display text-[15px] font-bold" style={tileColors(t.categoryName)}>

@@ -40,9 +40,9 @@ const dayIndex = (iso: string, start: string) =>
 /** Cor por forma de pagamento: fixa por entidade, nunca pela posição no ranking. */
 const METHOD_SLOT: Partial<Record<MethodGroup, string>> = {
   pix: 'var(--series-1)',
-  debito: 'var(--series-3)',
-  boleto: 'var(--series-4)',
-  transferencia: 'var(--series-6)',
+  vr: 'var(--series-3)',
+  pagamento_fatura: 'var(--series-4)',
+  debito: 'var(--series-6)',
 }
 const CARD_SLOTS = ['var(--series-2)', 'var(--series-5)']
 
@@ -314,8 +314,8 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
         {slices.rows.length === 0 ? (
           <p className="text-sm text-muted">Sem gastos neste mês.</p>
         ) : (
-          <div className="grid items-center gap-4 sm:grid-cols-[200px_1fr]">
-            <div className="relative mx-auto h-[200px] w-[200px]">
+          <div className="space-y-4">
+            <div className="relative mx-auto h-[210px] w-[210px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -327,7 +327,10 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
                     paddingAngle={slices.rows.length > 1 ? 1.5 : 0}
                     stroke="var(--color-surface, #fff)"
                     strokeWidth={2}
-                    isAnimationActive={false}
+                    isAnimationActive
+                    animationBegin={80}
+                    animationDuration={750}
+                    animationEasing="ease-out"
                     onClick={(d: unknown) => {
                       const p = (d as { payload?: { key?: string; hasChildren?: boolean } } | null)?.payload
                       if (!drillNode && p?.hasChildren && p.key) setDrill(p.key)
@@ -353,7 +356,7 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
             </div>
             <ul className="space-y-1.5">
               {slices.rows.map((c) => (
-                <li key={c.key} className="flex items-center gap-2.5 text-sm">
+                <li key={c.key} className="flex min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1 text-sm transition-colors hover:bg-background">
                   <span className="size-3 shrink-0 rounded-full" style={{ background: c.color }} aria-hidden />
                   {c.hasChildren && !drillNode ? (
                     <button type="button" onClick={() => setDrill(c.key)} className="min-w-0 flex-1 truncate text-left font-medium underline-offset-2 hover:underline">
@@ -375,7 +378,7 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
                     </Link>
                   )}
                   <span className="shrink-0 font-semibold tabular-nums">{Math.round(c.share * 100)}%</span>
-                  <span className="w-[86px] shrink-0 text-right text-xs tabular-nums text-muted">{money(c.cents)}</span>
+                  <span className="shrink-0 text-right text-xs tabular-nums text-muted">{money(c.cents)}</span>
                 </li>
               ))}
             </ul>

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import tripsSql from '../../supabase/migrations/20261110120000_trips.sql?raw'
 import { Button } from '@/components/ui/button'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatBRLFromCents, parseMoneyToCents } from '@/lib/currency'
 import { supabase } from '@/lib/supabase'
@@ -155,7 +156,7 @@ export function TripsPage() {
         </section>
       ) : null}
 
-      {loading ? <p className="text-sm text-muted">Carregando…</p> : null}
+      {loading ? <ListSkeleton rows={6} /> : null}
       {!loading && active.length === 0 && !adding ? (
         <section className="rounded-3xl border border-dashed border-border p-6 text-center text-sm text-muted">
           Nenhuma viagem ainda. Toque em <strong>Nova viagem</strong> — por exemplo o intercâmbio, o Réveillon ou a viagem de fim de semana.

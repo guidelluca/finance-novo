@@ -88,14 +88,17 @@ export function AppShell() {
       <main className="mx-auto w-full max-w-lg flex-1 px-4 pt-4">
         <AppLock />
         <PasskeyPrompt />
-        <Outlet />
+        {/* cada troca de tela reanima a entrada (ver .page-enter no CSS) */}
+        <div key={location.pathname} className="page-enter">
+          <Outlet />
+        </div>
       </main>
 
       {moreOpen ? (
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+            className="fixed inset-0 z-40 animate-[fadeUp_200ms_ease-out] bg-black/40 backdrop-blur-sm"
             onClick={() => setMoreOpen(false)}
             aria-label="Fechar menu"
           />
@@ -104,7 +107,7 @@ export function AppShell() {
             role="dialog"
             aria-modal="true"
           >
-            <div className="animate-[fadeUp_150ms_ease-out] overflow-hidden rounded-3xl border border-border bg-surface shadow-xl">
+            <div className="sheet-in overflow-hidden rounded-3xl border border-border bg-surface shadow-xl">
               <ul className="grid grid-cols-2 gap-1 p-2">
                 {secondaryNav.map(({ to, icon: Icon, label }) => (
                   <li key={to}>
@@ -156,7 +159,7 @@ export function AppShell() {
       ) : null}
 
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]"
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
         aria-label="Principal"
       >
         <ul className="mx-auto flex max-w-lg items-start justify-between gap-0.5 px-1 pb-1 pt-2">
@@ -168,7 +171,7 @@ export function AppShell() {
                   aria-label="Adicionar ou importar"
                   className={({ isActive }) =>
                     cn(
-                      '-mt-4 flex size-14 items-center justify-center rounded-[20px] shadow-lg transition-transform active:scale-95',
+                      '-mt-4 flex size-14 items-center justify-center rounded-[20px] shadow-lg shadow-black/20 transition-transform duration-200 hover:-translate-y-0.5 hover:rotate-90 active:scale-90',
                       isActive ? 'bg-lime text-ink' : 'bg-ink text-lime',
                     )
                   }
@@ -192,8 +195,8 @@ export function AppShell() {
                     <>
                       <span
                         className={cn(
-                          'flex h-[30px] w-[52px] items-center justify-center rounded-full transition-colors',
-                          isActive && 'bg-lime text-ink',
+                          'flex h-[30px] w-[52px] items-center justify-center rounded-full transition-colors duration-200',
+                          isActive && 'nav-pill-active bg-lime text-ink',
                         )}
                       >
                         <Icon className="size-5" strokeWidth={1.8} />

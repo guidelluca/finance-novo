@@ -4,6 +4,7 @@ import { AlertCircle, Plus, Search, SlidersHorizontal, Trash2, X } from 'lucide-
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { MonthSwitcher } from '@/components/ui/month-switcher'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMonthData } from '@/hooks/useMonthData'
@@ -547,7 +548,7 @@ export function ExtratoPage() {
           <span className="shrink-0 text-sm font-semibold tabular-nums">−{formatBRLFromCents(cons.result.plannedRent.cents)}</span>
         </Link>
       ) : null}
-      {loading ? <p className="text-sm text-muted">Carregando…</p> : null}
+      {loading ? <ListSkeleton rows={6} /> : null}
       {!loading && days.length === 0 ? (
         <p className="rounded-3xl border border-dashed border-border p-6 text-center text-sm text-muted">
           {q || chip !== 'all' ? 'Nada encontrado com esse filtro.' : 'Nenhum lançamento neste mês.'}{' '}
