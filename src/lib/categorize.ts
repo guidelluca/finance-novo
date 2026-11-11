@@ -105,8 +105,15 @@ const FOOD_CHILDREN: { name: string; synonyms: string[] }[] = [
 ]
 
 /** Cria/organiza Alimentação e as subcategorias (uma vez por conta). Devolve true se mexeu em algo. */
+const foodTreeRunning = new Set<string>()
+
 export async function ensureFoodTree(user: User): Promise<boolean> {
   if (user.user_metadata?.food_tree_v1) return false
+  // uma vez por sessão, mesmo se a confirmação do Supabase demorar a chegar no usuário
+  const key = `finance:food-tree:${user.id}`
+  if (foodTreeRunning.has(user.id) || sessionStorage.getItem(key)) return false
+  foodTreeRunning.add(user.id)
+  sessionStorage.setItem(key, '1')
   const { data, error } = await supabase.from('categories').select('*').eq('user_id', user.id)
   if (error) throw error
   const cats = (data ?? []) as Category[]

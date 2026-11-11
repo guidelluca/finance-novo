@@ -46,7 +46,14 @@ async function mock(page) {
     const json = (body, status = 200, headers = {}) =>
       route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*', ...headers }, body: JSON.stringify(body) })
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' } })
-    if (url.pathname.startsWith('/auth/v1/user')) return json(user)
+    if (url.pathname.startsWith('/auth/v1/user')) {
+      // como o Supabase de verdade: PUT grava o user_metadata e devolve o usuário atualizado
+      if (req.method() === 'PUT') {
+        const body = JSON.parse(req.postData() || '{}')
+        user.user_metadata = { ...user.user_metadata, ...(body.data ?? {}) }
+      }
+      return json(user)
+    }
     if (url.pathname.startsWith('/auth/v1/')) return json({})
     const table = url.pathname.replace('/rest/v1/', '')
     if (req.method() !== 'GET' && req.method() !== 'HEAD') return json([], 201)
