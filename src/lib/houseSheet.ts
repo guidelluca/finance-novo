@@ -23,7 +23,20 @@ export type SheetResident = {
   aluguelCents: number
   caixinhaCents: number
   totalCents: number
+  /** demais colunas da linha do morador (versões antigas do cache não têm) */
+  aguaCents?: number
+  luzCents?: number
+  netCents?: number
+  iptuCents?: number
+  extrasCents?: number
+  multasCents?: number
+  dividasCents?: number
+  contaQuePagaCents?: number
 }
+export type SheetConta = { conta: string; valorCents: number; divisao: string; vencimento: string; status: string }
+export type SheetColetivo = { quem: string; quantoCents: number; oQue: string; obs: string }
+export type SheetAcerto = { quem: string; deveCents: number; paraQuem: string; obs: string }
+export type SheetMonth = { title: string; label: string; year: number; month: number }
 
 export type HouseSheet = {
   tab: string
@@ -31,6 +44,10 @@ export type HouseSheet = {
   fetchedAt: string
   residents: SheetResident[]
   aluguelSumCents: number
+  contas?: SheetConta[]
+  coletivos?: SheetColetivo[]
+  acertos?: SheetAcerto[]
+  availableMonths?: SheetMonth[]
 }
 
 /**
@@ -110,14 +127,33 @@ export async function fetchHouseSheet(tab: string, api = DEFAULT_SHEET_API): Pro
       aluguelCents: money(r.aluguel),
       caixinhaCents: money(r.caixinha),
       totalCents: money(r.total),
+      aguaCents: money(r.agua),
+      luzCents: money(r.luz),
+      netCents: money(r.net),
+      iptuCents: money(r.iptu),
+      extrasCents: money(r.sofa) + money(r.dryWall),
+      multasCents: money(r.multas),
+      dividasCents: money(r.dividas),
+      contaQuePagaCents: money(r.contaQuePaga),
     }))
     .filter((r) => r.nome && !/^total$/i.test(r.nome))
+  const str = (v: unknown) => String(v ?? '').trim()
+  const b = body as unknown as {
+    contas?: Record<string, unknown>[]
+    gastosColetivos?: Record<string, unknown>[]
+    acertosIndividuais?: Record<string, unknown>[]
+    availableMonths?: SheetMonth[]
+  }
   const sheet: HouseSheet = {
     tab: body.mesReferencia ?? tab,
     label: body.mesLabel ?? tab,
     fetchedAt: new Date().toISOString(),
     residents,
     aluguelSumCents: residents.reduce((s, r) => s + r.aluguelCents, 0),
+    contas: (b.contas ?? []).map((c) => ({ conta: str(c.conta), valorCents: money(c.valor), divisao: str(c.divisao), vencimento: str(c.vencimento), status: str(c.status) })).filter((c) => c.conta),
+    coletivos: (b.gastosColetivos ?? []).map((c) => ({ quem: str(c.quem), quantoCents: money(c.quanto), oQue: str(c.oQue), obs: str(c.obs) })).filter((c) => c.quem && c.quantoCents),
+    acertos: (b.acertosIndividuais ?? []).map((c) => ({ quem: str(c.quem), deveCents: money(c.deveQuanto), paraQuem: str(c.paraQuem), obs: str(c.obs) })).filter((c) => c.quem && c.deveCents),
+    availableMonths: Array.isArray(b.availableMonths) ? b.availableMonths : undefined,
   }
   try {
     localStorage.setItem(cacheKey(tab), JSON.stringify(sheet))
@@ -126,4 +162,58 @@ export async function fetchHouseSheet(tab: string, api = DEFAULT_SHEET_API): Pro
   }
   window.dispatchEvent(new CustomEvent(SHEET_EVENT))
   return sheet
+}
+
+/** Lê várias abas em sequência (o servidor gratuito não aguenta muitas de uma vez). */
+export async function fetchHouseMonths(tabs: string[], onProgress?: (done: number, total: number) => void): Promise<{ ok: string[]; failed: string[] }> {
+  const ok: string[] = []
+  const failed: string[] = []
+  for (const [i, t] of tabs.entries()) {
+    try {
+      await fetchHouseSheet(t)
+      ok.push(t)
+    } catch {
+      failed.push(t)
+    }
+    onProgress?.(i + 1, tabs.length)
+  }
+  return { ok, failed }
+}
+
+export type CaixinhaItem = { data: string; descricao: string; valorCents: number; obs: string }
+
+/** Extrato da caixinha (aba "Caixinha" da planilha). */
+export async function fetchCaixinha(api = DEFAULT_SHEET_API): Promise<CaixinhaItem[]> {
+  const res = await fetch(`${api}?action=getCaixinhaStatement`)
+  const body = (await res.json().catch(() => null)) as { ok?: boolean; items?: Record<string, unknown>[] } | null
+  if (!res.ok || !body?.ok) throw new Error('Não consegui ler a caixinha.')
+  const items = (body.items ?? []).map((i) => ({
+    data: String(i.data ?? ''),
+    descricao: String(i.descricao ?? ''),
+    valorCents: money(i.valor),
+    obs: String(i.obs ?? ''),
+  }))
+  try {
+    localStorage.setItem('finance:house-caixinha', JSON.stringify({ at: new Date().toISOString(), items }))
+  } catch {
+    /* sem armazenamento */
+  }
+  return items
+}
+
+export function readCaixinhaCache(): { at: string; items: CaixinhaItem[] } | null {
+  try {
+    const raw = localStorage.getItem('finance:house-caixinha')
+    return raw ? (JSON.parse(raw) as { at: string; items: CaixinhaItem[] }) : null
+  } catch {
+    return null
+  }
+}
+
+/** "OUT_2026" → "2026-10" (para ordenar e casar com o extrato). */
+export function tabToYm(tab: string): string | null {
+  const m = tab.toUpperCase().match(/^([A-Z]{3})_(\d{4})$/)
+  if (!m) return null
+  const idx = MONTHS.indexOf(m[1]!)
+  return idx < 0 ? null : `${m[2]}-${String(idx + 1).padStart(2, '0')}`
 }

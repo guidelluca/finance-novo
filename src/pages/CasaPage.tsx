@@ -1,5 +1,6 @@
 import { Check, Clock, Info, Plus, RefreshCw, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { HouseAnalysis } from '@/components/house/HouseAnalysis'
 import { Button } from '@/components/ui/button'
 import { MonthSwitcher } from '@/components/ui/month-switcher'
 import { useAuth } from '@/contexts/AuthContext'
@@ -260,6 +261,8 @@ export function CasaPage() {
           <RefreshCw className={cn('size-4', sheetState.loading && 'animate-spin')} /> {cached ? 'Atualizar' : 'Ler'}
         </Button>
       </section>
+
+      <HouseAnalysis />
 
       <section className="space-y-3 rounded-3xl border border-border bg-surface p-[18px]">
         <div>
