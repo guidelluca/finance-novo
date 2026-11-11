@@ -102,6 +102,7 @@ export interface Database {
           keywords: string[]
           notes: string | null
           archived: boolean
+          travelers: number
           created_at: string
         }
         Insert: {
@@ -115,6 +116,7 @@ export interface Database {
           keywords?: string[]
           notes?: string | null
           archived?: boolean
+          travelers?: number
           created_at?: string
         }
         Update: {
@@ -128,6 +130,7 @@ export interface Database {
           keywords?: string[]
           notes?: string | null
           archived?: boolean
+          travelers?: number
           created_at?: string
         }
         Relationships: []

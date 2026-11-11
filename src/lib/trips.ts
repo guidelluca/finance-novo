@@ -19,6 +19,8 @@ export type Trip = {
   keywords: string[]
   notes: string | null
   archived: boolean
+  /** pessoas cobertas pelos valores (1 = só você); some a coluna antiga → 1 */
+  travelers?: number
   created_at: string
 }
 export type TripItem = {
@@ -102,10 +104,24 @@ export async function searchTxs(userId: string, terms: string[], linkedIds: Set<
   return ((data ?? []) as TxLite[]).filter((t) => !linkedIds.has(t.id))
 }
 
+function addMonthsIso(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number) as [number, number, number]
+  const f = new Date(Date.UTC(y, m - 1 + n, 1))
+  const last = new Date(Date.UTC(f.getUTCFullYear(), f.getUTCMonth() + 1, 0)).getUTCDate()
+  return `${f.getUTCFullYear()}-${String(f.getUTCMonth() + 1).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`
+}
+
 const toLinked = (t: TxLite): LinkedTx => ({ id: t.id, date: t.date, amountCents: t.amount_cents, description: t.description_raw, kind: t.kind })
 
 export type CatRow = { key: string; label: string; plannedCents: number; realCents: number; forecastCents: number }
-export type ItemStatus = { item: TripItem; realCents: number; matchedCount: number; status: 'ok' | 'parcial' | 'acima' | 'sem_lancamento' }
+export type ItemStatus = {
+  item: TripItem
+  realCents: number
+  matchedCount: number
+  status: 'ok' | 'parcial' | 'acima' | 'sem_lancamento' | 'pelo_plano'
+  /** item parcelado sem lançamento ligado: parcelas pagas pelo calendário do plano */
+  planPaid: number
+}
 export type TripSummary = {
   plannedCents: number
   paidCents: number
@@ -131,6 +147,14 @@ export function summarizeTrip(trip: Trip, items: TripItem[], links: TripLink[], 
   const myTxs = myLinks.map((l) => byId.get(l.transaction_id)).filter((t): t is TxLite => Boolean(t))
   const myItems = items.filter((i) => i.trip_id === trip.id)
   const all = realOf(myTxs, today)
+  let paidCents = all.paidCents
+  let committedCents = all.committedCents
+  let nextMonthCents = all.nextMonthInstallmentsCents
+  const installments = [...all.installments]
+  const nextYm = (() => {
+    const [y, m] = today.split('-').map(Number) as [number, number]
+    return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+  })()
 
   // real por categoria: item ligado manda; senão, adivinha pelo texto
   const itemCat = new Map(myItems.map((i) => [i.id, i.category]))
@@ -141,17 +165,41 @@ export function summarizeTrip(trip: Trip, items: TripItem[], links: TripLink[], 
   const byCat = new Map<string, TxLite[]>()
   for (const t of myTxs) byCat.set(catOfTx(t), [...(byCat.get(catOfTx(t)) ?? []), t])
 
-  const rows: CatRow[] = TRIP_CATEGORIES.map((c) => {
-    const planned = myItems.filter((i) => i.category === c.key).reduce((a, i) => a + i.amount_cents, 0)
-    const r = realOf(byCat.get(c.key) ?? [], today)
-    const real = r.paidCents + r.committedCents
-    return { key: c.key, label: c.label, plannedCents: planned, realCents: real, forecastCents: Math.max(planned, real) }
-  }).filter((r) => r.plannedCents || r.realCents)
-
   const itemStatus: ItemStatus[] = myItems.map((item) => {
     const linked = myLinks.filter((l) => l.item_id === item.id).map((l) => byId.get(l.transaction_id)).filter((t): t is TxLite => Boolean(t))
     const r = realOf(linked, today)
     const real = r.paidCents + r.committedCents
+    // sem lançamento ligado, mas com data: o calendário do plano diz o que já foi pago
+    if (!linked.length && item.first_date) {
+      const n = Math.max(1, item.installments)
+      const per = Math.floor(item.amount_cents / n)
+      const first = item.amount_cents - per * (n - 1)
+      let planPaid = 0
+      let paidPart = 0
+      for (let k = 0; k < n; k++) {
+        const date = addMonthsIso(item.first_date, k)
+        const cents = k === 0 ? first : per
+        if (date <= today) {
+          planPaid += 1
+          paidPart += cents
+          paidCents += cents
+        } else {
+          committedCents += cents
+          if (date.slice(0, 7) === nextYm) nextMonthCents += cents
+        }
+      }
+      if (n > 1) {
+        installments.push({
+          name: item.description,
+          perMonthCents: per,
+          paid: planPaid,
+          total: n,
+          lastMonth: addMonthsIso(item.first_date, n - 1).slice(0, 7),
+          futureCents: item.amount_cents - paidPart,
+        })
+      }
+      return { item, realCents: item.amount_cents, matchedCount: 0, status: 'pelo_plano' as const, planPaid }
+    }
     const status: ItemStatus['status'] = !linked.length
       ? 'sem_lancamento'
       : Math.abs(real - item.amount_cents) <= Math.max(100, item.amount_cents * 0.02)
@@ -159,8 +207,17 @@ export function summarizeTrip(trip: Trip, items: TripItem[], links: TripLink[], 
         : real > item.amount_cents
           ? 'acima'
           : 'parcial'
-    return { item, realCents: real, matchedCount: linked.length, status }
+    return { item, realCents: real, matchedCount: linked.length, status, planPaid: 0 }
   })
+
+  const rows: CatRow[] = TRIP_CATEGORIES.map((c) => {
+    const planned = myItems.filter((i) => i.category === c.key).reduce((a, i) => a + i.amount_cents, 0)
+    const r = realOf(byCat.get(c.key) ?? [], today)
+    // itens no plano (parcelados com data, sem lançamento ligado) contam como real
+    const scheduled = itemStatus.filter((x) => x.status === 'pelo_plano' && x.item.category === c.key).reduce((a, x) => a + x.item.amount_cents, 0)
+    const real = r.paidCents + r.committedCents + scheduled
+    return { key: c.key, label: c.label, plannedCents: planned, realCents: real, forecastCents: Math.max(planned, real) }
+  }).filter((r) => r.plannedCents || r.realCents)
 
   const days =
     trip.start_date && trip.end_date
@@ -168,14 +225,14 @@ export function summarizeTrip(trip: Trip, items: TripItem[], links: TripLink[], 
       : null
   return {
     plannedCents: myItems.reduce((a, i) => a + i.amount_cents, 0),
-    paidCents: all.paidCents,
-    committedCents: all.committedCents,
-    realCents: all.paidCents + all.committedCents,
+    paidCents,
+    committedCents,
+    realCents: paidCents + committedCents,
     forecastCents: rows.reduce((a, r) => a + r.forecastCents, 0),
     byCategory: rows,
     items: itemStatus,
-    installments: all.installments,
-    nextMonthCents: all.nextMonthInstallmentsCents,
+    installments,
+    nextMonthCents,
     days,
   }
 }

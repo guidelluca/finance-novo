@@ -176,6 +176,7 @@ export function TripsPage() {
                   <span className="block text-xs text-muted">
                     {t.start_date ? dateLabel(t.start_date) : 'sem data'}
                     {t.budget_cents ? ` · orçamento ${brl0(t.budget_cents)}` : ''}
+                    {(t.travelers ?? 1) > 1 ? ` · ${t.travelers} pessoas` : ''}
                   </span>
                 </span>
                 <span className="text-right">
@@ -216,6 +217,23 @@ function TripDetail({ trip, data, today, reload }: { trip: Trip; data: Data; tod
   const [searching, setSearching] = useState(false)
   const [ai, setAi] = useState<TripAi | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
+  const travelers = Math.max(1, trip.travelers ?? 1)
+  const [perPerson, setPerPerson] = useState(false)
+  const factor = perPerson ? travelers : 1
+  // valores da tela: total da viagem ou dividido por pessoa
+  const brl0 = (c: number) => formatBRLFromCents(Math.round(c / factor)).replace(/,00$/, '')
+  const setTravelers = async (n: number) => {
+    const { error } = await supabase.from('trips').update({ travelers: n }).eq('id', trip.id)
+    if (error) {
+      setErr(
+        /travelers/.test(error.message)
+          ? 'Falta a coluna "travelers" no banco: rode o SQL de atualização que te passei no chat.'
+          : error.message,
+      )
+      return
+    }
+    await reload()
+  }
 
   const terms = useMemo(
     () => [...trip.keywords, ...(trip.destination ? trip.destination.split(/[,;]/).map((x) => x.trim()) : [])].filter(Boolean),
@@ -325,6 +343,34 @@ function TripDetail({ trip, data, today, reload }: { trip: Trip; data: Data; tod
       </header>
       {err ? <p className="rounded-2xl border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{err}</p> : null}
 
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <label className="flex items-center gap-1.5 text-muted">
+          Pessoas
+          <select
+            className="h-9 rounded-lg border border-border bg-surface px-2 text-foreground"
+            value={travelers}
+            onChange={(e) => void setTravelers(Number(e.target.value))}
+            aria-label="Quantas pessoas a viagem cobre"
+          >
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        {travelers > 1 ? (
+          <div className="flex rounded-xl border border-border bg-surface p-0.5" role="group" aria-label="Ver valores">
+            <button type="button" onClick={() => setPerPerson(false)} className={cn('rounded-lg px-3 py-1.5', !perPerson && 'bg-ink font-semibold text-[#f2f3ee]')}>
+              Total ({travelers} pessoas)
+            </button>
+            <button type="button" onClick={() => setPerPerson(true)} className={cn('rounded-lg px-3 py-1.5', perPerson && 'bg-ink font-semibold text-[#f2f3ee]')}>
+              Por pessoa
+            </button>
+          </div>
+        ) : null}
+      </div>
+
       <section className="space-y-3 rounded-[28px] bg-ink p-5 text-[#f2f3ee]">
         <div className="grid grid-cols-3 gap-2 text-center">
           <div>
@@ -405,7 +451,7 @@ function TripDetail({ trip, data, today, reload }: { trip: Trip; data: Data; tod
         {s.items.length === 0 && !itemForm ? <p className="text-sm text-muted">Lance o que você planeja gastar: passagem, hospedagem, curso, seguro…</p> : null}
         <ul className="space-y-2">
           {s.items.map(({ item, realCents, matchedCount, status }) => {
-            const cands = status === 'sem_lancamento' ? matchItemCandidates(item, [...unassigned, ...suggest]).slice(0, 3) : []
+            const cands = status === 'sem_lancamento' || status === 'pelo_plano' ? matchItemCandidates(item, [...unassigned, ...suggest]).slice(0, 3) : []
             return (
               <li key={item.id} className="space-y-1.5 rounded-2xl border border-[#eeefe9] p-3 dark:border-[#2b2e34]">
                 <div className="flex items-start gap-2">
@@ -424,15 +470,25 @@ function TripDetail({ trip, data, today, reload }: { trip: Trip; data: Data; tod
                       status === 'parcial' && 'bg-[#eef2fd] text-[#2f5bd3] dark:bg-[#1b2440] dark:text-[#8fb0ff]',
                       status === 'acima' && 'bg-[#fff4ec] text-[#9a3412] dark:bg-[#2a1d15] dark:text-[#ffb38a]',
                       status === 'sem_lancamento' && 'bg-background text-muted',
+                      status === 'pelo_plano' && 'bg-[#eef2fd] text-[#2f5bd3] dark:bg-[#1b2440] dark:text-[#8fb0ff]',
                     )}
                   >
-                    {status === 'ok' ? 'bate' : status === 'parcial' ? `${brl0(realCents)} de ${brl0(item.amount_cents)}` : status === 'acima' ? `${brl0(realCents - item.amount_cents)} acima` : 'sem lançamento'}
+                    {status === 'pelo_plano'
+                      ? item.installments > 1
+                        ? `${s.items.find((x) => x.item.id === item.id)?.planPaid ?? 0}/${item.installments} pagas`
+                        : (s.items.find((x) => x.item.id === item.id)?.planPaid ?? 0) > 0
+                          ? 'pago'
+                          : 'a pagar'
+                      : status === 'ok' ? 'bate' : status === 'parcial' ? `${brl0(realCents)} de ${brl0(item.amount_cents)}` : status === 'acima' ? `${brl0(realCents - item.amount_cents)} acima` : 'sem lançamento'}
                   </span>
                   <button type="button" onClick={() => void deleteItem(item.id)} className="shrink-0 rounded-md p-1 text-muted hover:bg-background" aria-label="Apagar item">
                     <X className="size-4" />
                   </button>
                 </div>
                 {matchedCount ? <p className="text-[11px] text-muted">{matchedCount} lançamento(s) ligado(s) a este item (parcelas futuras contadas).</p> : null}
+                {status === 'pelo_plano' ? (
+                  <p className="text-[11px] text-muted">Pelo calendário do plano. Ligue a parcela do cartão (abaixo) para conferir com o extrato.</p>
+                ) : null}
                 {cands.length ? (
                   <div className="space-y-1">
                     <p className="text-[11px] text-muted">Parece com:</p>
