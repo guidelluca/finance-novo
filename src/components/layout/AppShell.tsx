@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { seedDefaultCategoriesIfEmpty, seedDefaultRulesIfEmpty } from '@/lib/seedCategories'
-import { autoCategorizeExisting, ensureFoodTree } from '@/lib/categorize'
+import { autoCategorizeExisting, ensureFoodTree, fixWalletCategories } from '@/lib/categorize'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
 type NavItem = { to: string; icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; label: string }
@@ -53,6 +54,14 @@ export function AppShell() {
           const since = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10)
           const r = await autoCategorizeExisting(user.id, since)
           if (r.filled || r.moved) window.dispatchEvent(new CustomEvent('finance:recategorized', { detail: r }))
+        }
+        // uma vez: conserta compras com Apple Pay que caíram em categoria errada
+        const wk = `finance:wallet-fix-v2:${user.id}`
+        if (!user.user_metadata?.wallet_fix_v2 && !sessionStorage.getItem(wk)) {
+          sessionStorage.setItem(wk, '1')
+          const w = await fixWalletCategories(user.id)
+          await supabase.auth.updateUser({ data: { wallet_fix_v2: true } })
+          if (w.fixed) window.dispatchEvent(new CustomEvent('finance:recategorized', { detail: w }))
         }
       } catch (e) {
         console.error(e)

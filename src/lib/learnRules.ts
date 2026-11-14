@@ -12,7 +12,8 @@ export async function learnRules(
   const map = new Map<string, string>()
   for (const c of corrections) {
     const key = c.key?.trim().toLowerCase()
-    if (key && key.length >= 4) map.set(key, c.categoryId)
+    // nunca aprender "apple"/"apple pay": é a carteira, não o estabelecimento
+    if (key && key.length >= 4 && !/^(apple|apple ?pay|applepay|google ?pay|gpay|samsung ?pay|wallet)$/.test(key)) map.set(key, c.categoryId)
   }
   if (map.size === 0) return 0
   try {

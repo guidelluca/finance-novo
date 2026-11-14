@@ -11,7 +11,7 @@
  * reaproveitando as categorias que você já tem (Restaurantes, Ifood, Lanche, Mercado).
  */
 import type { User } from '@supabase/supabase-js'
-import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
+import { identifyMerchant, pickCategoryId, stripWallet } from '@/lib/merchantIdentify'
 import { suggestCategoryId } from '@/lib/rulesEngine'
 import { supabase } from '@/lib/supabase'
 import type { Category, Rule } from '@/types/database'
@@ -19,6 +19,11 @@ import type { Category, Rule } from '@/types/database'
 const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase()
 
 export const LEARNED_PRIORITY = 150
+
+/** Padrão de regra que é só a carteira digital (pegaria qualquer compra com Apple Pay). */
+export function isWalletPattern(p: string): boolean {
+  return /^\s*(apple|apple ?pay|applepay|google ?pay|gpay|samsung ?pay|pay|wallet)\s*$/i.test(p)
+}
 
 /** Chave do estabelecimento para a memória ("SUPERMERCADOS DALBEN" e "Supermercados Dalben" juntos). */
 export function merchantKey(description: string): string {
@@ -33,6 +38,8 @@ export function buildMerchantMemory(rows: { description_raw: string; category_id
   for (const r of rows) {
     if (!r.category_id) continue
     const k = merchantKey(r.description_raw)
+    // "Apple Pay" sozinho não é estabelecimento
+    if (/^apple/.test(k) && /pay/i.test(r.description_raw)) continue
     if (!k || k.length < 3) continue
     const m = count.get(k) ?? new Map<string, number>()
     m.set(r.category_id, (m.get(r.category_id) ?? 0) + 1)
@@ -69,8 +76,11 @@ export function suggestCategory(
   t: { description: string; account?: string | null; hint?: string | null },
   ctx: { rules: Rule[]; categories: Pick<Category, 'id' | 'name' | 'parent_id'>[]; memory?: MerchantMemory },
 ): Suggestion {
-  const learned = ctx.rules.filter((r) => r.enabled && r.priority >= LEARNED_PRIORITY)
-  const general = ctx.rules.filter((r) => r.enabled && r.priority < LEARNED_PRIORITY)
+  // regras olham o texto SEM "Apple Pay"/"Google Pay"; regras que eram só a carteira não valem
+  const usable = ctx.rules.filter((r) => r.enabled && !isWalletPattern(r.pattern))
+  const learned = usable.filter((r) => r.priority >= LEARNED_PRIORITY)
+  const general = usable.filter((r) => r.priority < LEARNED_PRIORITY)
+  t = { ...t, description: stripWallet(t.description) || t.description }
   const r1 = suggestCategoryId(t.description, learned)
   if (r1) return { categoryId: r1, source: 'regra' }
   const m = identifyMerchant(t.description)
@@ -210,4 +220,66 @@ export async function autoCategorizeExisting(userId: string, since: string): Pro
     }
   }
   return { filled, moved }
+}
+
+/**
+ * Conserto (uma vez): compras com Apple Pay/Google Pay que ficaram em categoria errada
+ * (ex.: Uber em "Contas Mensais") e regras aprendidas que eram só "apple"/"apple pay".
+ * Recategoriza pelo estabelecimento de verdade quando ele é reconhecido.
+ */
+export async function fixWalletCategories(userId: string): Promise<{ fixed: number; rulesRemoved: number }> {
+  const [{ data: cData }, { data: rData }] = await Promise.all([
+    supabase.from('categories').select('*').eq('user_id', userId),
+    supabase.from('rules').select('*').eq('user_id', userId),
+  ])
+  const categories = (cData ?? []) as Category[]
+  // farmácia/beleza vão para "Auto cuidado": cria se você ainda não tem
+  if (!categories.some((c) => /^auto ?cuidado$/i.test(norm(c.name)))) {
+    const { data: ins } = await supabase.from('categories').insert({ user_id: userId, name: 'Auto cuidado', parent_id: null, sort_order: 50 }).select('*').single()
+    if (ins) categories.push(ins as Category)
+  }
+  const allRules = (rData ?? []) as Rule[]
+  const bad = allRules.filter((r) => isWalletPattern(r.pattern))
+  if (bad.length) await supabase.from('rules').delete().in('id', bad.map((r) => r.id))
+  const rules = allRules.filter((r) => r.enabled && !isWalletPattern(r.pattern))
+
+  const rows: TxRow[] = []
+  for (let i = 0; i < 20000; i += 1000) {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('id, description_raw, category_id, account')
+      .eq('user_id', userId)
+      .or(
+        [
+          '%apple%pay%', '%applepay%', '%google pay%', '%samsung pay%',
+          // farmácia e beleza → Auto cuidado
+          '%drogaria%', '%farmacia%', '%raia%', '%drogasil%', '%pacheco%', '%panvel%', '%boticario%', '%natura%', '%sephora%', '%cosmet%', '%perfum%', '%beleza%',
+          // Uber/99 que caíram fora de transporte
+          '%uber%', '%99%pop%', '%99app%', '%99 tecnologia%',
+        ]
+          .map((p) => `description_raw.ilike.${p}`)
+          .join(','),
+      )
+      .order('id')
+      .range(i, i + 999)
+    if (error) throw error
+    rows.push(...((data ?? []) as TxRow[]))
+    if (!data || data.length < 1000) break
+  }
+  const updates = new Map<string, string[]>()
+  for (const t of rows) {
+    const s = suggestCategory({ description: t.description_raw, account: t.account }, { rules, categories })
+    // só troca quando há um sinal forte (estabelecimento conhecido ou regra sua sem carteira)
+    if (!s.categoryId || s.categoryId === t.category_id || (s.source !== 'estabelecimento' && s.source !== 'regra')) continue
+    updates.set(s.categoryId, [...(updates.get(s.categoryId) ?? []), t.id])
+  }
+  let fixed = 0
+  for (const [categoryId, ids] of updates) {
+    for (let i = 0; i < ids.length; i += 100) {
+      const { error } = await supabase.from('transactions').update({ category_id: categoryId }).eq('user_id', userId).in('id', ids.slice(i, i + 100))
+      if (error) throw error
+      fixed += Math.min(100, ids.length - i)
+    }
+  }
+  return { fixed, rulesRemoved: bad.length }
 }

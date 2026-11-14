@@ -37,6 +37,7 @@ const C = {
   taxas: ['Taxas', 'Impostos', 'Tarifas'],
   estacionamento: ['Estacionamento', 'Carro', 'Transporte'],
   saude: ['Saúde', 'Farmácia'],
+  autocuidado: ['Auto cuidado', 'Autocuidado', 'Beleza', 'Cuidados pessoais', 'Saúde', 'Farmácia'],
   assinatura: ['Assinaturas', 'Contas Mensais'],
   contas: ['Contas Mensais', 'Contas'],
   comprasOnline: ['Compras', 'Compras online'],
@@ -89,14 +90,15 @@ const KNOWN: { re: RegExp; name: string | ((m: RegExpMatchArray) => string); kin
   { re: /^IOF\b/i, name: 'IOF', kind: 'Imposto', categories: C.taxas },
   { re: /ANUIDADE|TARIFA|JUROS|ENCARGOS|MULTA/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Tarifa / juros', categories: C.taxas },
   // Transporte por app
-  { re: /^UBER\s*\*?\s*EATS/i, name: 'Uber Eats', kind: 'Delivery', categories: C.delivery },
-  { re: /^UBER\b/i, name: 'Uber (corrida)', kind: 'Transporte por app', categories: C.appTransporte },
-  { re: /^99\s?FOOD|^99\s?\*?\s?FOOD/i, name: '99Food', kind: 'Delivery', categories: C.delivery },
-  { re: /^99\s?(\*|POP|APP|TAXI|$)/i, name: '99 (corrida)', kind: 'Transporte por app', categories: C.appTransporte },
+  // Uber/99 em qualquer posição do texto ("DL *UBER", "PAG*UBER TRIP", "99 TECNOLOGIA", "99APP")
+  { re: /\bUBER\s*\*?\s*EATS/i, name: 'Uber Eats', kind: 'Delivery', categories: C.delivery },
+  { re: /\bUBER\b/i, name: 'Uber (corrida)', kind: 'Transporte por app', categories: C.appTransporte },
+  { re: /\b99\s?\*?\s?FOOD/i, name: '99Food', kind: 'Delivery', categories: C.delivery },
+  { re: /^99\b|\b99\s?(\*|POP|APP|TAXI|TECNOLOGIA|RIDE|CORRIDA)|\b99APP\b|\b99TAXI/i, name: '99 (corrida)', kind: 'Transporte por app', categories: C.appTransporte },
   { re: /^CABIFY/i, name: 'Cabify', kind: 'Transporte por app', categories: C.appTransporte },
   { re: /^INDRIVE/i, name: 'inDrive', kind: 'Transporte por app', categories: C.appTransporte },
   // Assinaturas / digitais
-  { re: /^APPLE\.?COM|^APPLE\s/i, name: 'Apple (App Store/iCloud)', kind: 'Assinatura digital', categories: C.assinatura },
+  { re: /^APPLE\.?COM|^ITUNES|^APPLE\s+(SERVICES|ONE|MUSIC|TV|ICLOUD|STORE)\b/i, name: 'Apple (App Store/iCloud)', kind: 'Assinatura digital', categories: C.assinatura },
   { re: /^GOOGLE\s?\*?\s?(YOUTUBE|YT)/i, name: 'YouTube Premium', kind: 'Assinatura digital', categories: C.assinatura },
   { re: /^GOOGLE/i, name: 'Google (Play/One)', kind: 'Assinatura digital', categories: C.assinatura },
   { re: /NETFLIX/i, name: 'Netflix', kind: 'Streaming', categories: C.assinatura },
@@ -133,7 +135,9 @@ const KNOWN: { re: RegExp; name: string | ((m: RegExpMatchArray) => string); kin
   { re: /\bENEL\b|\bCPFL\b|ELEKTRO|EDP\b/i, name: (m) => m[0]!.toUpperCase(), kind: 'Energia', categories: C.contas },
   { re: /SABESP|SANASA/i, name: (m) => m[0]!.toUpperCase(), kind: 'Água', categories: C.contas },
   // Saúde
-  { re: /DROGA\s?RAIA|DROGASIL|DROGAL|DROGARIA|PACHECO|PAGUE\s?MENOS|FARMAIS|FARM[AÁ]CIA|PANVEL|ULTRAFARMA/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Farmácia', categories: C.saude },
+  // Farmácia, cosméticos e beleza → Auto cuidado ("Pague Menos" de supermercado não é farmácia)
+  { re: /DROGA\s?RAIA|\bRAIA\b|DROGASIL|DROGAL|DROGARIA|DROGA\b|PACHECO|(?<!SUPERMERCADOS?\s)PAGUE\s?MENOS|FARMAIS|FARM[AÁ]CIA|PANVEL|ULTRAFARMA|SAO\s?JOAO\s?FARM|NISSEI|PAGUE\s?MENOS\s?FARM|DROGALL|ONOFRE/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Farmácia', categories: C.autocuidado },
+  { re: /BOTIC[AÁ]RIO|\bNATURA\b|\bAVON\b|SEPHORA|EUDORA|QUEM\s?DISSE|BERENICE|\bMAC\s?COSM|OCCITANE|GRANADO|BELEZA\s?NA\s?WEB|[EÉ]POCA\s?COSM|MAHOGANY|JEQUITI|IKESAKI|COSM[EÉ]TIC|PERFUM|BELEZA|MAQUIAG|DERMAGE|SKIN\s?CARE|SALON\s?LINE|\bLOLA\b|KIEHL|CLINIQUE|LANCOME|THE\s?BEAUTY|BEAUTY|BARBEARIA|BARBER|MANICURE|ESMALTE|EST[EÉ]TICA|SAL[AÃ]O|CABELEIR|DEPILA|SOBRANCELHA|SPA\b/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Beleza / cuidado pessoal', categories: C.autocuidado },
   // Mercado
   { re: /SUPERMERC|SUPER\s?MERCA|HIPERMERC|MERCADO\b|MERCEARIA|HORTIFRUT|SACOL[AÃ]O|ATACAD|ASSAI|CARREFOUR|P[AÃ]O\s?DE\s?A[CÇ]UCAR|DALBEN|OXXO|SAMS\s?CLUB|EMP[OÓ]RIO\s?DA\s?FRUTA|MINUTO\s?P[AÃ]O/i, name: (m) => titleCase(m.input ?? m[0]!), kind: 'Mercado', categories: C.mercado },
   // Combustível / carro
@@ -181,8 +185,22 @@ const CITIES =
  * Tira cidade grudada no fim (fatura Itaú: "SUPERMERCADOS DALBENCAM", "UBER * PENDINGSAO PAULO"),
  * sufixos "BR", parcela e ruído de gateway.
  */
+/**
+ * Carteiras digitais (Apple Pay, Google Pay, Samsung Pay) são só o MEIO de pagamento: o estabelecimento é o
+ * resto do texto. "APPLE PAY UBER *TRIP" → "UBER *TRIP"; "Supermercado X (Apple Pay)" → "Supermercado X".
+ */
+export const WALLET_RE = /[(\[]?\s*(?:via\s+|pagamento\s+(?:com|via)\s+)?(?:apple\s?pay|applepay|google\s?pay|gpay|samsung\s?pay|garmin\s?pay|wallet)\s*[)\]]?/gi
+export function stripWallet(text: string): string {
+  return text
+    .replace(WALLET_RE, ' ')
+    .replace(/^\s*[-–·:*|/]+\s*/, '')
+    .replace(/\s*[-–·:*|/]+\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function cleanDescriptor(raw: string, cityHint?: string | null): string {
-  let s = raw.replace(/\s*\(parcela \d+\/\d+\)\s*$/i, '').replace(/\s+/g, ' ').trim()
+  let s = stripWallet(raw.replace(/\s*\(parcela \d+\/\d+\)\s*$/i, '')).replace(/\s+/g, ' ').trim()
   const city = cityHint?.trim().toUpperCase()
   if (city && city.length >= 3) {
     // corta o maior prefixo da cidade que esteja colado no fim (mín. 2 letras)
