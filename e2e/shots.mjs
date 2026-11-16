@@ -113,6 +113,9 @@ const screens = [
   { name: '16-categorias', path: '/categories' },
   { name: '17-casa', path: '/casa' },
   { name: '18-extrato-casa', path: '/transactions?filtro=dup' },
+  { name: '19-credito', path: '/credito', height: 2400 },
+  { name: '20-credito-escuro', path: '/credito', theme: 'dark', height: 2400 },
+  { name: '21-panorama', path: '/panorama' },
 ]
 for (const s of screens) {
   try {
