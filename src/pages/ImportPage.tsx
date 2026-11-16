@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import { loadMerchantMemory, suggestCategory, type MerchantMemory } from '@/lib/categorize'
 import { fetchOpenFinanceDrafts, lastSync, readConnections } from '@/lib/openFinance'
+import { mergeAgainstOpenFinance, mergeOpenFinanceDrafts } from '@/lib/mergeMatch'
 import { supabase } from '@/lib/supabase'
 import {
   ensureCategoriesForImportHints,
@@ -232,7 +233,7 @@ async function flagPossibleDuplicates(
       near.set(nk, [...(near.get(nk) ?? []), t])
     }
   }
-  return drafts.map((d) => {
+  const flagged = drafts.map((d) => {
     const ek = `${d.date}|${d.amountCents}|${d.kind}|${logical(d.descriptionRaw, null)}`
     const n = exact.get(ek) ?? 0
     if (n > 0) {
@@ -249,6 +250,12 @@ async function flagPossibleDuplicates(
       ],
     }
   })
+  // o que já veio pelo Open Finance não entra de novo pelo arquivo/print
+  try {
+    return await mergeAgainstOpenFinance(userId, flagged)
+  } catch {
+    return flagged
+  }
 }
 
 export type OldRow = {
@@ -776,7 +783,15 @@ export function ImportPage() {
       ])
       const ruleRows = (rr ?? []) as Rule[]
       const categoryRows = (cc ?? []) as Category[]
-      const flagged = await flagPossibleDuplicates(user.id, r.drafts)
+      // mescla com o que já está no app (PDF, prints, manual, buscas anteriores): o repetido vem desmarcado
+      const m = await mergeOpenFinanceDrafts(user.id, r.drafts)
+      const flagged = m.drafts
+      const fresh = flagged.filter((d) => !d.excluded).length
+      r.warnings.splice(
+        1,
+        0,
+        `${fresh} novo(s) para salvar · ${m.merged} já estavam no app (PDF/print/manual) · ${m.already} já vieram numa busca anterior. Os repetidos vêm desmarcados.`,
+      )
       setLastParserId('open_finance_pluggy_v1')
       setDetectedBank('Open Finance')
       setShotSourceName(`open-finance-${format(new Date(), 'yyyyMMdd-HHmm')}`)

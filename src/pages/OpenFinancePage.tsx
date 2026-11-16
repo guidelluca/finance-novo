@@ -5,6 +5,7 @@ import fnCode from '../../supabase/functions/pluggy-sync/index.ts?raw'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatBRLFromCents } from '@/lib/currency'
+import { findSavedDuplicates, mergeSavedDuplicates, type DupPair } from '@/lib/mergeMatch'
 import { OF_BANKS, ofRefresh, ofStatus, readConnections, saveConnections, type OfConnection, type OfItemStatus } from '@/lib/openFinance'
 import { cn } from '@/lib/utils'
 
@@ -45,6 +46,34 @@ export function OpenFinancePage() {
   const [err, setErr] = useState<string | null>(null)
   const [status, setStatus] = useState<OfItemStatus[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [dups, setDups] = useState<DupPair[] | null>(null)
+  const [mergedMsg, setMergedMsg] = useState<string | null>(null)
+  const scanDups = async () => {
+    if (!user) return
+    setBusy('dups')
+    setErr(null)
+    setMergedMsg(null)
+    try {
+      setDups(await findSavedDuplicates(user.id))
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+  const doMerge = async () => {
+    if (!user || !dups?.length) return
+    setBusy('merge')
+    try {
+      const n = await mergeSavedDuplicates(user.id, dups)
+      setMergedMsg(`${n} repetido(s) juntado(s). Ficou o lançamento antigo, com a categoria e a viagem do novo quando faltavam.`)
+      setDups([])
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
   const ref = (import.meta.env.VITE_SUPABASE_URL ?? '').match(/https:\/\/([a-z0-9]+)\.supabase\.co/)?.[1]
   const dash = ref ? `https://supabase.com/dashboard/project/${ref}` : 'https://supabase.com/dashboard'
 
@@ -189,6 +218,42 @@ export function OpenFinancePage() {
           </Link>
         ) : null}
       </section>
+
+      {conns.length ? (
+        <section className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold">Repetidos já salvos</h2>
+              <p className="text-xs text-muted">Lançamentos do Open Finance que repetem um que já estava no app (PDF, print ou manual).</p>
+            </div>
+            <Button size="sm" variant="secondary" disabled={Boolean(busy)} onClick={() => void scanDups()}>
+              {busy === 'dups' ? 'Procurando…' : 'Procurar'}
+            </Button>
+          </div>
+          {mergedMsg ? <p className="rounded-xl bg-accent-muted p-2.5 text-sm">{mergedMsg}</p> : null}
+          {dups && dups.length === 0 && !mergedMsg ? <p className="text-sm text-muted">Nenhum repetido. Tudo certo.</p> : null}
+          {dups && dups.length ? (
+            <>
+              <ul className="max-h-80 space-y-1.5 overflow-y-auto text-xs">
+                {dups.map((p) => (
+                  <li key={p.of.id} className="rounded-xl bg-background p-2.5">
+                    <p className="flex justify-between gap-2 font-semibold">
+                      <span className="truncate">{p.old.description_raw}</span>
+                      <span className="shrink-0 tabular-nums">{formatBRLFromCents(p.old.amount_cents)}</span>
+                    </p>
+                    <p className="text-muted">
+                      fica: {p.old.date.split('-').reverse().join('/')} · {p.old.account ?? 'sem conta'} — sai (Open Finance): {p.of.date.split('-').reverse().join('/')} · {p.of.description_raw}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <Button className="w-full" disabled={Boolean(busy)} onClick={() => void doMerge()}>
+                {busy === 'merge' ? 'Juntando…' : `Juntar ${dups.length} repetido(s)`}
+              </Button>
+            </>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">
         <h2 className="text-base font-semibold">Como configurar (uma vez)</h2>

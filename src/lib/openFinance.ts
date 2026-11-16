@@ -133,7 +133,6 @@ export async function fetchOpenFinanceDrafts(conns: OfConnection[], from: string
   drafts.sort((x, y) => (x.date < y.date ? 1 : -1))
   warnings.push(`Open Finance (Meu Pluggy): ${drafts.length} lançamento(s) de ${r.accounts.length} conta(s)/cartão(ões), de ${r.from.split('-').reverse().join('/')} a ${r.to.split('-').reverse().join('/')}.`)
   if (pending) warnings.push(`${pending} lançamento(s) ainda pendente(s) no banco.`)
-  warnings.push('O que já foi importado antes (PDF, prints ou outra sincronização) aparece como repetido e vem desmarcado.')
   await supabase.auth.updateUser({ data: { pluggy_last_sync: new Date().toISOString() } }).catch(() => undefined)
   return { drafts, warnings }
 }
