@@ -6,7 +6,7 @@
  * Sem dependências externas (testável isoladamente). Nada é apagado aqui: só classifica.
  */
 import { classifyHouse, residentOf, selfResident, type HouseConfig } from '@/lib/house'
-import { sheetTabForPayment, type SheetResident } from '@/lib/houseSheet'
+import { sheetTabForPayment, tabToYm, type SheetResident } from '@/lib/houseSheet'
 import { identifyMerchant } from './merchantIdentify'
 
 export type TxSource = 'fatura' | 'extrato' | 'csv' | 'print' | 'manual'
@@ -121,6 +121,7 @@ export type PlannedRent = {
   aluguelCents: number
   caixinhaCents: number
   cents: number
+  manual: boolean
 }
 
 export type RentShare = {
@@ -138,6 +139,8 @@ export type RentShare = {
   from: { who: string; cents: number; date: string; txId: string }[]
   /** aba da planilha que confere com este aluguel (mês anterior ao pagamento) */
   sheetTab: string
+  /** valor do aluguel digitado à mão para o mês (vale mais que a planilha) */
+  manual: boolean
   /** planilha lida: sua linha e o que cada morador deveria ter mandado */
   sheet: {
     tab: string
@@ -381,9 +384,11 @@ export function consolidateMonth(
       const cxTotal = 0
       let sheetCheck: RentShare['sheet'] = null
       const me = sheet ? selfResident(sheet.residents, house, ownerName) : null
+      const rentYm = tabToYm(tab)
+      const manualRent = rentYm && rentShares.every((r) => r.sheetTab !== tab) ? house.rent?.[rentYm] : undefined
       if (sheet && me && rentShares.every((r) => r.sheet?.tab !== tab)) {
-        // seu aluguel é o valor da coluna Aluguel da SUA linha na planilha — e nada mais
-        shareCents = me.aluguelCents
+        // seu aluguel: o valor digitado à mão para o mês; sem ele, a coluna Aluguel da SUA linha na planilha
+        shareCents = manualRent ?? me.aluguelCents
         cxCents = 0
         const members = house.members.map((m) => {
           const row = residentOf(m, sheet.residents)
@@ -396,9 +401,8 @@ export function consolidateMonth(
         })
         sheetCheck = { tab, label: sheet.label, fetchedAt: sheet.fetchedAt, me, members, aluguelSumCents: sheet.aluguelSumCents }
       } else {
-        // sem a planilha daquele mês não há valor de aluguel: o pagamento fica fora da soma
-        // até a planilha ser lida (o app lê sozinho ao abrir)
-        shareCents = 0
+        // sem valor digitado e sem a planilha daquele mês: o pagamento fica fora da soma
+        shareCents = manualRent ?? 0
       }
       rentShares.push({
         txId: pay.id,
@@ -411,6 +415,7 @@ export function consolidateMonth(
         shareCents,
         from,
         sheetTab: tab,
+        manual: manualRent != null,
         sheet: sheetCheck,
       })
       if (shareCents > 0) {
@@ -426,22 +431,25 @@ export function consolidateMonth(
   //     (Aluguel + Caixinha da sua linha) já entra no mês como "previsto". Some quando o pagamento
   //     à imobiliária aparecer no extrato (aí vale o 0c).
   let plannedRent: PlannedRent | null = null
-  if (house?.sheets) {
+  if (house) {
     const tab = sheetTabForPayment(`${month}-15`)
-    const sheet = house.sheets[tab]
+    const sheet = house.sheets?.[tab]
     const me = sheet ? selfResident(sheet.residents, house, ownerName) : null
-    const cents = me ? me.aluguelCents : 0
-    if (sheet && me && cents > 0 && !rentShares.some((r) => r.sheetTab === tab)) {
+    const rentYm = tabToYm(tab)
+    const manual = rentYm ? house.rent?.[rentYm] : undefined
+    const cents = manual ?? (me ? me.aluguelCents : 0)
+    if (cents > 0 && !rentShares.some((r) => r.sheetTab === tab)) {
       // usa a sua categoria de aluguel/moradia, se já existir em algum lançamento
       const cat = [...items, ...hist].find((t) => t.categoryId && t.categoryName && /aluguel|moradia|casa/i.test(t.categoryName))
       const id = `previsto:aluguel:${tab}`
+      const label = sheet?.label ?? tab
       items.push(
         enrich({
           id,
           date: `${month}-15`,
           amountCents: cents,
           kind: 'debit',
-          description: `Aluguel ${sheet.label} (planilha)`,
+          description: `Aluguel ${label} (${manual != null ? 'valor seu' : 'planilha'})`,
           account: null,
           categoryId: cat?.categoryId ?? '__aluguel__',
           categoryName: cat?.categoryName ?? 'Aluguel',
@@ -449,7 +457,7 @@ export function consolidateMonth(
           importFileId: null,
         }),
       )
-      plannedRent = { id, tab, label: sheet.label, aluguelCents: me.aluguelCents, caixinhaCents: me.caixinhaCents, cents, nome: me.nome }
+      plannedRent = { id, tab, label, aluguelCents: cents, caixinhaCents: me?.caixinhaCents ?? 0, cents, nome: me?.nome ?? 'você', manual: manual != null }
     }
   }
 

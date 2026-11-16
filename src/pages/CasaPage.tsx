@@ -7,9 +7,9 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useMonthData } from '@/hooks/useMonthData'
 import { usePeriods } from '@/hooks/usePeriods'
 import { formatBRLFromCents, parseMoneyToCents } from '@/lib/currency'
-import { caixinhaShare, classifyHouse, markHouseTx, readHouse, saveHouse, setCaixinha, type HouseConfig } from '@/lib/house'
+import { caixinhaShare, classifyHouse, markHouseTx, readHouse, saveHouse, selfResident, setCaixinha, setRent, type HouseConfig } from '@/lib/house'
 import { RENT_PIX_MIN, shiftMonth, type ConsTx, type RentShare } from '@/lib/monthConsolidation'
-import { fetchHouseSheet, readSheetCache, sheetTabForPayment } from '@/lib/houseSheet'
+import { fetchHouseSheet, readSheetCache, sheetTabForPayment, tabToYm } from '@/lib/houseSheet'
 import { cn } from '@/lib/utils'
 
 const d2 = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
@@ -87,7 +87,7 @@ export function CasaPage() {
       const per = Math.round(cents / Math.round(people))
       setNotice(
         cents
-          ? `Caixinha de ${formatBRLFromCents(cents)} ÷ ${Math.round(people)} = ${formatBRLFromCents(per)} por pessoa. Somei ${formatBRLFromCents(per)} ao seu aluguel deste mês.`
+          ? `Caixinha de ${formatBRLFromCents(cents)} ÷ ${Math.round(people)} = ${formatBRLFromCents(per)} por pessoa.`
           : 'Caixinha deste mês apagada.',
       )
     } catch (e) {
@@ -146,6 +146,34 @@ export function CasaPage() {
 
   // planilha da casa: aba do mês do aluguel (pago entre 10 e 15 → nov → NOV_2026)
   const sheetTab = rents[0]?.sheetTab ?? sheetTabForPayment(`${month}-15`)
+  // seu aluguel do mês, digitado à mão (vale mais que a planilha)
+  const rentYm = tabToYm(sheetTab) ?? month
+  const manualRent = house.rent[rentYm] ?? null
+  const sheetRent = (() => {
+    const sh = readSheetCache(sheetTab)
+    return sh ? (selfResident(sh.residents, house, (user?.user_metadata?.owner_name as string | undefined) ?? null)?.aluguelCents ?? null) : null
+  })()
+  const [rentInput, setRentInput] = useState('')
+  useEffect(() => {
+    setRentInput(manualRent ? (manualRent / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '')
+  }, [rentYm, manualRent])
+  const saveRent = async () => {
+    if (!user) return
+    const cents = rentInput.trim() ? parseMoneyToCents(rentInput) : 0
+    if (cents == null || Number.isNaN(cents) || cents < 0) {
+      setNotice('Valor do aluguel inválido. Ex.: 716 ou 716,00')
+      return
+    }
+    setBusyId('aluguel')
+    try {
+      await setRent(user, rentYm, cents || null)
+      setNotice(cents ? `Seu aluguel de ${sheetTab} ficou ${formatBRLFromCents(cents)}.` : `Aluguel de ${sheetTab} apagado: vale o da planilha, se houver.`)
+    } catch (e) {
+      setNotice(`Não consegui salvar: ${(e as Error).message}`)
+    } finally {
+      setBusyId(null)
+    }
+  }
   const [sheetState, setSheetState] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null })
   const cached = readSheetCache(sheetTab)
   const loadSheet = async () => {
@@ -311,19 +339,54 @@ export function CasaPage() {
         ) : null}
       </section>
 
+      <section className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-base font-semibold">Seu aluguel · {sheetTab}</h2>
+          <span className="text-xs text-muted">pago entre 10 e 15</span>
+        </div>
+        <form
+          className="flex items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void saveRent()
+          }}
+        >
+          <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted">
+            Valor que é seu neste mês (R$)
+            <input
+              inputMode="decimal"
+              value={rentInput}
+              onChange={(e) => setRentInput(e.target.value)}
+              placeholder={sheetRent ? `Planilha: ${(sheetRent / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'Ex.: 716,00'}
+              className="h-10 rounded-xl border border-border bg-background px-3 text-sm text-foreground"
+            />
+          </label>
+          <Button size="sm" type="submit" disabled={busyId === 'aluguel'} className="h-10">
+            Salvar
+          </Button>
+        </form>
+        <p className="text-xs text-muted">
+          {manualRent
+            ? `Conta ${formatBRLFromCents(manualRent)} como seu gasto de aluguel neste mês, no lugar do pagamento à imobiliária.`
+            : sheetRent
+              ? `Sem valor digitado: vale o da planilha (${formatBRLFromCents(sheetRent)}). Digite para usar o seu.`
+              : 'Digite o valor do seu aluguel deste mês. Ele entra nas suas saídas no lugar do pagamento à imobiliária.'}
+        </p>
+      </section>
+
       {rents.map((r) => r.sheet ? <SheetRentCard key={r.txId} r={r} /> : (
         <section key={r.txId} className="space-y-2 rounded-3xl border border-border bg-surface p-[18px]">
           <div className="flex items-baseline justify-between">
             <h2 className="text-base font-semibold">Aluguel de {d2(r.date)}</h2>
             <span className="text-sm text-muted">{formatBRLFromCents(r.paidCents)}</span>
           </div>
-          <p className="text-sm text-muted">
-            Seu aluguel é o valor da sua linha na planilha da casa ({r.sheetTab}). A planilha desse mês ainda não foi lida, então este pagamento
-            ainda não conta nas suas saídas.
-          </p>
-          <Button size="sm" variant="secondary" disabled={sheetState.loading} onClick={() => void fetchHouseSheet(r.sheetTab).catch(() => undefined)}>
-            Ler planilha {r.sheetTab}
-          </Button>
+          {r.manual ? (
+            <p className="text-sm">
+              Conta como seu gasto: <b>{formatBRLFromCents(r.shareCents)}</b> <span className="text-muted">(valor que você digitou)</span>
+            </p>
+          ) : (
+            <p className="text-sm text-muted">Ainda não conta nas suas saídas: digite o valor do seu aluguel acima.</p>
+          )}
         </section>
       ))}
 
@@ -340,7 +403,7 @@ export function CasaPage() {
             <span className="text-xs text-muted">previsto · pago entre 10 e 15</span>
           </div>
           <dl className="space-y-1 text-sm">
-            <div className="flex justify-between font-semibold"><dt>Aluguel ({result.plannedRent.nome})</dt><dd className="tabular-nums">{formatBRLFromCents(result.plannedRent.aluguelCents)}</dd></div>
+            <div className="flex justify-between font-semibold"><dt>Aluguel ({result.plannedRent.manual ? "valor seu" : result.plannedRent.nome})</dt><dd className="tabular-nums">{formatBRLFromCents(result.plannedRent.aluguelCents)}</dd></div>
           </dl>
           <p className="text-xs text-muted">
             Já entra nas suas saídas do mês. Quando o pagamento à imobiliária aparecer no extrato, o app confere cada morador com a planilha.
@@ -493,9 +556,10 @@ function SheetRentCard({ r }: { r: RentShare }) {
       <div className="space-y-1 rounded-2xl bg-background p-3 text-sm">
         <p className="text-xs text-muted">Sua linha na planilha ({sh.me.nome})</p>
         <div className="flex justify-between font-semibold">
-          <span>Seu aluguel (coluna Aluguel)</span>
+          <span>{r.manual ? 'Seu aluguel (valor que você digitou)' : 'Seu aluguel (coluna Aluguel)'}</span>
           <span className="tabular-nums">{brl(r.shareCents)}</span>
         </div>
+        {r.manual && r.shareCents !== sh.me.aluguelCents ? <p className="text-[11px] text-muted">Na planilha: {brl(sh.me.aluguelCents)}.</p> : null}
         <p className="text-[11px] text-muted">É só esse valor que entra nas suas saídas do mês.</p>
       </div>
 

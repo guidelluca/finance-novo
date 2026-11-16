@@ -19,6 +19,8 @@ export type HouseConfig = {
   tx: Record<string, 'casa' | 'meu'>
   /** valor total da caixinha em cada mês ("2026-11" → centavos), dividido igualmente entre os moradores */
   caixinha: Record<string, number>
+  /** seu aluguel digitado à mão, por mês do aluguel ("2026-11" → centavos). Vale mais que a planilha. */
+  rent: Record<string, number>
   /** quantas pessoas moram na casa e dividem a caixinha (você incluído) */
   people: number
   /** abas da planilha da casa já lidas neste aparelho (não vai para a conta) */
@@ -32,6 +34,7 @@ export const DEFAULT_HOUSE: HouseConfig = {
   keywords: ['caixinha'],
   tx: {},
   caixinha: {},
+  rent: {},
   people: 5,
 }
 
@@ -45,6 +48,7 @@ export function readHouse(user: User | null): HouseConfig {
     keywords: Array.isArray(raw.keywords) ? raw.keywords.filter((m) => typeof m === 'string') : DEFAULT_HOUSE.keywords,
     tx: raw.tx && typeof raw.tx === 'object' ? (raw.tx as HouseConfig['tx']) : {},
     caixinha: raw.caixinha && typeof raw.caixinha === 'object' ? (raw.caixinha as HouseConfig['caixinha']) : {},
+    rent: raw.rent && typeof raw.rent === 'object' ? (raw.rent as HouseConfig['rent']) : {},
     people: typeof raw.people === 'number' && raw.people >= 1 ? Math.round(raw.people) : DEFAULT_HOUSE.people,
   }
 }
@@ -160,6 +164,17 @@ export async function setCaixinha(user: User, month: string, cents: number | nul
   if (cents && cents > 0) caixinha[month] = cents
   else delete caixinha[month]
   const next = { ...cfg, caixinha, people: people && people >= 1 ? Math.round(people) : cfg.people }
+  await saveHouse(next)
+  return next
+}
+
+/** Seu aluguel do mês (mês em que o aluguel é pago, "2026-11"), digitado à mão. Vazio apaga. */
+export async function setRent(user: User, month: string, cents: number | null): Promise<HouseConfig> {
+  const cfg = readHouse(user)
+  const rent = { ...cfg.rent }
+  if (cents && cents > 0) rent[month] = cents
+  else delete rent[month]
+  const next = { ...cfg, rent }
   await saveHouse(next)
   return next
 }

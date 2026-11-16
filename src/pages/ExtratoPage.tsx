@@ -541,7 +541,7 @@ export function ExtratoPage() {
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium">Aluguel {cons.result.plannedRent.label} · previsto</span>
             <span className="block text-xs text-muted">
-              Da planilha: aluguel {formatBRLFromCents(cons.result.plannedRent.aluguelCents)}. Já conta nas saídas; vira o pagamento real quando ele entrar no extrato.
+              {cons.result.plannedRent.manual ? "Valor que você digitou" : "Da planilha"}: aluguel {formatBRLFromCents(cons.result.plannedRent.aluguelCents)}. Já conta nas saídas; vira o pagamento real quando ele entrar no extrato.
             </span>
           </span>
           <span className="shrink-0 text-sm font-semibold tabular-nums">−{formatBRLFromCents(cons.result.plannedRent.cents)}</span>
