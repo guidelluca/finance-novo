@@ -11,6 +11,7 @@ export type ParserId =
   | 'csv_mercadopago_v1'
   | 'screenshot_ai_v1'
   | 'screenshot_local_v1'
+  | 'open_finance_pluggy_v1'
   | 'fatura_cartao_pdf_v1'
   | 'inter_extrato_v1'
   | 'csv_inter_v1'

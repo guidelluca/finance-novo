@@ -1,13 +1,14 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, Sparkles, Trash2, Upload, X } from 'lucide-react'
+import { Camera, Landmark, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import { loadMerchantMemory, suggestCategory, type MerchantMemory } from '@/lib/categorize'
+import { fetchOpenFinanceDrafts, lastSync, readConnections } from '@/lib/openFinance'
 import { supabase } from '@/lib/supabase'
 import {
   ensureCategoriesForImportHints,
@@ -121,6 +122,7 @@ async function deleteImportDocument(userId: string, fileId: string): Promise<{ d
 }
 
 function parserLabel(parserId: string): string {
+  if (parserId === 'open_finance_pluggy_v1') return 'Open Finance (Meu Pluggy)'
   return PARSER_OPTIONS.find((p) => p.id === parserId)?.label ?? parserId
 }
 
@@ -748,6 +750,42 @@ export function ImportPage() {
   }
   parseFileRef.current = parseFile
 
+  // ---------- Open Finance (Meu Pluggy)
+  const ofConns = readConnections(user)
+  const [ofDays, setOfDays] = useState<'last' | '30' | '90'>('last')
+  const [ofError, setOfError] = useState<string | null>(null)
+  const runOpenFinance = async () => {
+    if (!user || !ofConns.length) return
+    setOfError(null)
+    setBusy(true)
+    try {
+      const today = format(new Date(), 'yyyy-MM-dd')
+      const last = lastSync(user)
+      const days = ofDays === '30' ? 30 : ofDays === '90' ? 90 : last ? Math.max(3, Math.ceil((Date.now() - Date.parse(last)) / 86_400_000) + 3) : 35
+      const from = format(new Date(Date.now() - Math.min(365, days) * 86_400_000), 'yyyy-MM-dd')
+      setProgress('Buscando nos bancos (Open Finance)…')
+      const r = await fetchOpenFinanceDrafts(ofConns, from, today)
+      if (!r.drafts.length) {
+        setOfError('Nenhum lançamento novo nesse período. Se você acabou de conectar, espere a primeira atualização do Meu Pluggy (até 24 h).')
+        return
+      }
+      setProgress('Conferindo repetidos…')
+      const flagged = await flagPossibleDuplicates(user.id, r.drafts)
+      setLastParserId('open_finance_pluggy_v1')
+      setDetectedBank('Open Finance')
+      setShotSourceName(`open-finance-${format(new Date(), 'yyyyMMdd-HHmm')}`)
+      setFile(null)
+      setWarnings(r.warnings)
+      setDrafts(enrichDrafts(flagged, ruleRows.filter((x) => x.enabled), categoryRows))
+      setStep('review')
+    } catch (e) {
+      setOfError((e as Error).message)
+    } finally {
+      setBusy(false)
+      setProgress(null)
+    }
+  }
+
   const updateDraft = (tempId: string, patch: Partial<TransactionDraft>) => {
     setDrafts((d) => d.map((x) => (x.tempId === tempId ? { ...x, ...patch } : x)))
   }
@@ -830,7 +868,11 @@ export function ImportPage() {
       const prepared = await Promise.all(
         toSave.map(async (d, i) => {
           const descKey = descKeys[i]!
-          const account = targetAccount?.name ?? (d.accountHint?.trim() || defaultAccount)
+          // Open Finance traz várias contas/cartões de uma vez: cada lançamento vai para a sua conta
+          const account =
+            parserId === 'open_finance_pluggy_v1'
+              ? d.accountHint?.trim() || defaultAccount
+              : (targetAccount?.name ?? (d.accountHint?.trim() || defaultAccount))
           const candidates = await transactionDedupCandidates(
             user.id,
             d.date,
@@ -1144,6 +1186,49 @@ export function ImportPage() {
       ) : null}
 
       {step === 'pick' ? (
+        <section className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef2fd] text-[#2f5bd3] dark:bg-[#1b2440] dark:text-[#8fb0ff]">
+              <Landmark className="size-5" strokeWidth={1.8} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">Buscar dos bancos (Open Finance)</p>
+              <p className="text-xs text-muted">
+                {ofConns.length
+                  ? `${ofConns.length} conexão(ões): ${ofConns.map((c) => c.bank).join(', ')}${lastSync(user) ? ` · última busca ${new Date(lastSync(user)!).toLocaleDateString('pt-BR')}` : ''}`
+                  : 'Conecte seus bancos pelo Meu Pluggy (grátis, só leitura).'}
+              </p>
+            </div>
+          </div>
+          {ofConns.length ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="h-10 rounded-xl border border-border bg-background px-2 text-sm"
+                value={ofDays}
+                onChange={(e) => setOfDays(e.target.value as typeof ofDays)}
+                aria-label="Período"
+              >
+                <option value="last">Desde a última busca</option>
+                <option value="30">Últimos 30 dias</option>
+                <option value="90">Últimos 90 dias</option>
+              </select>
+              <Button className="h-10" disabled={busy} onClick={() => void runOpenFinance()}>
+                {busy && progress?.startsWith('Buscando') ? 'Buscando…' : 'Buscar lançamentos'}
+              </Button>
+              <Link to="/open-finance" className="text-xs font-semibold underline">
+                Conexões
+              </Link>
+            </div>
+          ) : (
+            <Link to="/open-finance" className="inline-block text-sm font-semibold underline">
+              Configurar Open Finance →
+            </Link>
+          )}
+          {ofError ? <p className="text-xs text-danger">{ofError}</p> : null}
+        </section>
+      ) : null}
+
+      {step === 'pick' ? (
         <section className="space-y-3 rounded-3xl border border-border bg-surface p-[18px]">
           {saveNotice ? (
             <p role="status" className="rounded-xl bg-accent-muted px-3 py-2.5 text-sm">
@@ -1362,7 +1447,10 @@ export function ImportPage() {
                 {drafts.filter((d) => !d.excluded).length} de {drafts.length} lançamentos marcados
                 {detectedBank ? ` · ${detectedBank}` : ''}
               </CardDescription>
-              <label className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              {lastParserId === 'open_finance_pluggy_v1' ? (
+                <p className="mt-2 text-sm text-muted">Cada lançamento vai para a conta ou cartão de onde veio.</p>
+              ) : null}
+              <label className={cn('mt-2 flex flex-wrap items-center gap-2 text-sm', lastParserId === 'open_finance_pluggy_v1' && 'hidden')}>
                 <span className="font-medium">De qual conta é?</span>
                 <select
                   value={targetAccount?.id ?? ''}

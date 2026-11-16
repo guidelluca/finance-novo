@@ -1,4 +1,4 @@
-import { CalendarDays, ClipboardCheck, CreditCard, Fingerprint, FolderTree, Home, House, List, LogOut, Moon, PieChart, PiggyBank, Plane, Plus, Settings, Sparkles, Sun, Target, Upload } from 'lucide-react'
+import { CalendarDays, ClipboardCheck, CreditCard, Fingerprint, FolderTree, Home, House, Landmark, List, LogOut, Moon, PieChart, PiggyBank, Plane, Plus, Settings, Sparkles, Sun, Target, Upload } from 'lucide-react'
 import { FloatingAiChat } from '@/components/ai/FloatingAiChat'
 import { AppLock } from '@/components/auth/AppLock'
 import { PasskeyPrompt } from '@/components/auth/PasskeyPrompt'
@@ -28,6 +28,7 @@ const secondaryNav: NavItem[] = [
   { to: '/fechamento', icon: ClipboardCheck, label: 'Fechamento do mês' },
   { to: '/casa', icon: House, label: 'Casa (república)' },
   { to: '/viagens', icon: Plane, label: 'Viagens' },
+  { to: '/open-finance', icon: Landmark, label: 'Open Finance (bancos)' },
   { to: '/mes', icon: CalendarDays, label: 'Mês consolidado' },
   { to: '/cards', icon: CreditCard, label: 'Cartões' },
   { to: '/analysis', icon: Sparkles, label: 'Análise IA' },
