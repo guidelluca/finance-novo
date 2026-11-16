@@ -28,16 +28,23 @@ export function lastSync(user: User | null): string | null {
 async function call<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('pluggy-sync', { body })
   if (error) {
-    // mensagem da função (403/500) vem no corpo da resposta
     const ctx = (error as { context?: Response }).context
+    const status = ctx && typeof ctx.status === 'number' ? ctx.status : null
     let msg = error.message
     try {
-      const j = ctx ? await ctx.json() : null
+      const j = ctx ? await ctx.clone().json() : null
       if (j?.message) msg = j.message
     } catch {
-      /* mantém a mensagem genérica */
+      /* corpo não é JSON */
     }
-    if (/not found|404|Failed to send/i.test(msg)) msg = 'A função "pluggy-sync" ainda não está publicada no Supabase (veja o passo 3 na tela Open Finance).'
+    if (status === 404) {
+      msg = 'Não achei a função "pluggy-sync" no Supabase. Confira no passo 4 se ela foi publicada com esse nome exato (tudo minúsculo, com hífen).'
+    } else if (status === 401 && !/entre no app/i.test(msg)) {
+      msg = 'O Supabase recusou o login ao chamar a função. Saia e entre de novo no app e tente outra vez.'
+    } else if (error.name === 'FunctionsFetchError' || /Failed to send|Failed to fetch|NetworkError|Load failed/i.test(msg)) {
+      msg =
+        'Não consegui falar com a função "pluggy-sync". Se ainda não publicou, faça o passo 4. Se já publicou: confira o nome exato, espere 1 minuto e tente de novo.'
+    }
     throw new Error(msg)
   }
   if (!data?.ok) throw new Error(data?.message ?? 'Falha no Open Finance.')
