@@ -13,9 +13,9 @@ const pct = (v: number, of: number) => (of > 0 ? Math.round((v / of) * 100) : 0)
 
 /** As 3 partes do limite usado + o que sobra. Cores fixas (mesma parte = mesma cor em todos os cartões). */
 const PARTS = [
-  { key: 'closed', label: 'Fatura fechada', color: 'var(--series-2)', fg: '#ffffff' },
-  { key: 'open', label: 'Fatura do mês', color: 'var(--series-1)', fg: '#ffffff' },
-  { key: 'future', label: 'Parcelas futuras', color: 'var(--series-4)', fg: '#14161a' },
+  { key: 'closed', label: 'Fechada', color: 'var(--series-2)', fg: '#ffffff' },
+  { key: 'open', label: 'Do mês', color: 'var(--series-1)', fg: '#ffffff' },
+  { key: 'future', label: 'Parcelas', color: 'var(--series-4)', fg: '#14161a' },
 ] as const
 
 type Usage = { used: number; closed: number; open: number; future: number; limit: number | null; avail: number | null }
@@ -82,23 +82,19 @@ function Legend({ u, dark = false }: { u: Usage; dark?: boolean }) {
     { ...PARTS[2], v: u.future },
   ]
   return (
-    <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-      {rows.map((r) => (
-        <div key={r.key} className="flex items-center justify-between gap-2">
-          <dt className={cn('flex items-center gap-1.5', dark ? 'text-[#b9bdb4]' : 'text-muted')}>
-            <i className="size-2 shrink-0 rounded-full" style={{ background: r.color }} />
-            {r.label}
+    <dl className="grid grid-cols-4 gap-2 text-xs">
+      {[...rows, { key: 'avail', label: 'Disponível', color: 'transparent', v: u.avail }].map((r) => (
+        <div key={r.key} className="min-w-0">
+          <dt className={cn('flex items-center gap-1 truncate text-[11px]', dark ? 'text-[#b9bdb4]' : 'text-muted')}>
+            <i
+              className={cn('size-2 shrink-0 rounded-full', r.key === 'avail' && (dark ? 'border border-white/40' : 'border border-muted'))}
+              style={{ background: r.color }}
+            />
+            <span className="truncate">{r.label}</span>
           </dt>
-          <dd className="font-semibold tabular-nums">{BR(r.v)}</dd>
+          <dd className="mt-0.5 truncate font-semibold tabular-nums">{r.v != null ? BR0(r.v) : '—'}</dd>
         </div>
       ))}
-      <div className="flex items-center justify-between gap-2">
-        <dt className={cn('flex items-center gap-1.5', dark ? 'text-[#b9bdb4]' : 'text-muted')}>
-          <i className={cn('size-2 shrink-0 rounded-full border', dark ? 'border-white/40' : 'border-muted')} />
-          Disponível
-        </dt>
-        <dd className="font-semibold tabular-nums">{u.avail != null ? BR(u.avail) : '—'}</dd>
-      </div>
     </dl>
   )
 }
