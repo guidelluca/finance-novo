@@ -1,4 +1,5 @@
 import { pluggyLabel } from '@/lib/pluggyCategories'
+import { clearPending } from '@/lib/ofAutoSync'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -803,6 +804,7 @@ export function ImportPage() {
       setWarnings(r.warnings)
       setDrafts(enrichDrafts(flagged, ruleRows.filter((x) => x.enabled), categoryRows))
       setStep('review')
+      clearPending()
     } catch (e) {
       setOfError((e as Error).message)
     } finally {
@@ -810,6 +812,15 @@ export function ImportPage() {
       setProgress(null)
     }
   }
+
+  // vindo do aviso "lançamentos novos nos bancos" da Home: já busca direto
+  const autoOfRan = useRef(false)
+  useEffect(() => {
+    if (autoOfRan.current || searchParams.get('of') !== '1' || !user || !ofConns.length) return
+    autoOfRan.current = true
+    void runOpenFinance()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, searchParams])
 
   const updateDraft = (tempId: string, patch: Partial<TransactionDraft>) => {
     setDrafts((d) => d.map((x) => (x.tempId === tempId ? { ...x, ...patch } : x)))

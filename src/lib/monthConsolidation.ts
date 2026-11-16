@@ -193,7 +193,7 @@ const PLAUSIBLE_MAX: { re: RegExp; max: number; what: string }[] = [
   { re: /^iof\b|\btarifa\b|anuidade/i, max: 30_000, what: 'uma tarifa ou IOF' },
 ]
 
-const SELF_TRANSFER = /conta pr[oó]pria|mesma titularidade/i
+const SELF_TRANSFER = /conta pr[oó]pria|mesma titularidade|entre contas suas/i
 const fold = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
 const TRANSFER_HINT = /\b(pix|transf|transfer[eê]ncia|ted|doc)\b/i
 const FEE = /\b(anuidade|tarifa|juros|multa|encargo|mora|iof|cesta de servi[cç]os|pacote de servi[cç]os)\b/i

@@ -1,4 +1,4 @@
-import { CalendarDays, ClipboardCheck, CreditCard, Fingerprint, FolderTree, Home, House, Landmark, List, LogOut, Moon, PieChart, PiggyBank, Plane, Plus, Settings, Sparkles, Sun, Target, Upload } from 'lucide-react'
+import { CalendarDays, ClipboardCheck, CreditCard, Fingerprint, FolderTree, Home, House, Landmark, List, LogOut, Moon, PieChart, PiggyBank, Scale, Plane, Plus, Settings, Sparkles, Sun, Target, Upload } from 'lucide-react'
 import { FloatingAiChat } from '@/components/ai/FloatingAiChat'
 import { AppLock } from '@/components/auth/AppLock'
 import { PasskeyPrompt } from '@/components/auth/PasskeyPrompt'
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { seedDefaultCategoriesIfEmpty, seedDefaultRulesIfEmpty } from '@/lib/seedCategories'
+import { autoSync } from '@/lib/ofAutoSync'
 import { autoCategorizeExisting, ensureFoodTree, fixWalletCategories } from '@/lib/categorize'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -28,6 +29,7 @@ const secondaryNav: NavItem[] = [
   { to: '/fechamento', icon: ClipboardCheck, label: 'Fechamento do mês' },
   { to: '/casa', icon: House, label: 'Casa (república)' },
   { to: '/viagens', icon: Plane, label: 'Viagens' },
+  { to: '/panorama', icon: Scale, label: 'Panorama dos bancos' },
   { to: '/open-finance', icon: Landmark, label: 'Open Finance (bancos)' },
   { to: '/mes', icon: CalendarDays, label: 'Mês consolidado' },
   { to: '/cards', icon: CreditCard, label: 'Cartões' },
@@ -69,6 +71,15 @@ export function AppShell() {
       }
     })()
   }, [user])
+
+  // Open Finance: busca nos bancos 1×/dia ao abrir o app (saldos, cartões, lançamentos novos)
+  const uid = user?.id
+  useEffect(() => {
+    if (!user) return
+    const t = window.setTimeout(() => void autoSync(user).catch(() => undefined), 2500)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid])
 
   const isSecondaryActive = secondaryNav.some((it) => location.pathname === it.to)
   const closeMore = () => setMoreOpen(false)

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatBRLFromCents } from '@/lib/currency'
+import { readOverviewCache } from '@/lib/openFinance'
 import { fetchLinkedTxs, planGoal, readGoalMeta, saveGoalMeta, suggestCuts, type LinkedTx } from '@/lib/goalPlan'
 import { cn } from '@/lib/utils'
 
@@ -22,9 +23,25 @@ type Props = {
 }
 
 /** Plano da meta: quanto guardar por mês, ritmo, gastos já feitos (parcelas) e onde cortar. */
-export function GoalPlanPanel({ goal, deadline, savedCents, savedThisMonthCents, today, categoryAverages }: Props) {
+export function GoalPlanPanel({ goal, deadline, savedCents: savedManual, savedThisMonthCents, today, categoryAverages }: Props) {
   const { user } = useAuth()
   const meta = readGoalMeta(user, goal.id, goal.name)
+  // dinheiro guardado de verdade nos bancos (Open Finance): caixinhas/investimentos ligados a esta meta
+  const overview = readOverviewCache()
+  const pots = overview?.investments ?? []
+  const linkedIds = meta.investmentIds ?? []
+  const investedCents = pots.filter((v) => linkedIds.includes(v.id)).reduce((s, v) => s + v.balanceCents, 0)
+  const savedCents = linkedIds.length ? Math.max(savedManual, investedCents) : savedManual
+  const [pickPots, setPickPots] = useState(false)
+  const togglePot = async (id: string) => {
+    if (!user) return
+    const next = linkedIds.includes(id) ? linkedIds.filter((x) => x !== id) : [...linkedIds, id]
+    try {
+      await saveGoalMeta(user, goal.id, { ...meta, investmentIds: next })
+    } catch (e) {
+      setErr((e as Error).message)
+    }
+  }
   const [linked, setLinked] = useState<LinkedTx[]>([])
   const [loading, setLoading] = useState(false)
   const [editKw, setEditKw] = useState(false)
@@ -111,6 +128,35 @@ export function GoalPlanPanel({ goal, deadline, savedCents, savedThisMonthCents,
 
   return (
     <div className="space-y-3 text-sm">
+      {pots.length ? (
+        <div className="rounded-2xl bg-background p-2.5 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted">
+              {linkedIds.length
+                ? `Guardado nos bancos para esta meta: ${brl0(investedCents)}${investedCents < savedManual ? ' (menor que o registrado aqui, vale o maior)' : ''}`
+                : 'Ligue a caixinha/investimento desta meta para o guardado vir direto do banco.'}
+            </span>
+            <button type="button" className="shrink-0 font-semibold underline" onClick={() => setPickPots((v) => !v)}>
+              {pickPots ? 'Fechar' : linkedIds.length ? 'Trocar' : 'Escolher'}
+            </button>
+          </div>
+          {pickPots ? (
+            <ul className="mt-2 space-y-1">
+              {pots.map((v) => (
+                <li key={v.id}>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={linkedIds.includes(v.id)} onChange={() => void togglePot(v.id)} />
+                    <span className="flex-1 truncate">
+                      {v.bank} · {v.name}
+                    </span>
+                    <span className="tabular-nums">{brl0(v.balanceCents)}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       {target ? (
         <div className="space-y-1.5">
           <div className="flex h-3 overflow-hidden rounded-full bg-[#eeefe9] dark:bg-[#2b2e34]" role="img" aria-label="Composição da meta">

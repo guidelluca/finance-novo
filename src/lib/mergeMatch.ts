@@ -134,8 +134,11 @@ const br = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
  * Antes de revisar a busca do Open Finance: o que já está no app vem desmarcado, dizendo com qual
  * lançamento casou. Você pode marcar de volta se não for o mesmo.
  */
-export async function mergeOpenFinanceDrafts(userId: string, drafts: TransactionDraft[]): Promise<{ drafts: TransactionDraft[]; already: number; merged: number }> {
-  if (!drafts.length) return { drafts, already: 0, merged: 0 }
+export async function mergeOpenFinanceDrafts(
+  userId: string,
+  drafts: TransactionDraft[],
+): Promise<{ drafts: TransactionDraft[]; already: number; merged: number; matches: { tempId: string; rowId: string; rowDesc: string }[] }> {
+  if (!drafts.length) return { drafts, already: 0, merged: 0, matches: [] }
   const dates = drafts.map((d) => d.date).sort()
   const [rows, ofIds] = await Promise.all([loadRange(userId, shift(dates[0]!, -40), shift(dates[dates.length - 1]!, 40)), ofBatchIds(userId)])
   const news: Side[] = drafts.map((d) => ({ key: d.tempId, date: d.date, cents: d.amountCents, kind: d.kind, desc: d.descriptionRaw, account: d.accountHint ?? null, cardId: d.cardLast4 ? 'card' : null }))
@@ -144,10 +147,12 @@ export async function mergeOpenFinanceDrafts(userId: string, drafts: Transaction
   const rowById = new Map(rows.map((r) => [r.id, r]))
   let already = 0
   let merged = 0
+  const matches: { tempId: string; rowId: string; rowDesc: string }[] = []
   const out = drafts.map((d) => {
     const p = pairs.get(d.tempId)
     if (!p) return d
     const row = rowById.get(p.old.key)!
+    matches.push({ tempId: d.tempId, rowId: row.id, rowDesc: row.description_raw })
     const fromOf = row.import_batch_id ? ofIds.has(row.import_batch_id) : false
     if (fromOf) already += 1
     else merged += 1
@@ -162,7 +167,7 @@ export async function mergeOpenFinanceDrafts(userId: string, drafts: Transaction
       ],
     }
   })
-  return { drafts: out, already, merged }
+  return { drafts: out, already, merged, matches }
 }
 
 /* ----------------------------------------------------------------- limpeza do que já foi salvo */

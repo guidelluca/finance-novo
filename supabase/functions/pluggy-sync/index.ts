@@ -2,7 +2,7 @@
 // Segredos (Supabase → Edge Functions → Secrets):
 //   PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET  → do dashboard da Pluggy (nunca no app nem no GitHub)
 //   ALLOWED_USER_ID                         → o seu id de usuário do app (mostrado na tela Open Finance)
-// Ações (POST JSON): { action: 'status' | 'refresh' | 'transactions' | 'cards', itemIds: string[], from?: 'YYYY-MM-DD', to?: 'YYYY-MM-DD' }
+// Ações (POST JSON): { action: 'status' | 'refresh' | 'transactions' | 'cards' | 'overview', itemIds: string[], from?: 'YYYY-MM-DD', to?: 'YYYY-MM-DD' }
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
@@ -96,6 +96,79 @@ Deno.serve(async (req) => {
         }
       }
       return new Response(JSON.stringify({ ok: true, items: out }), { headers })
+    }
+
+    if (body.action === 'overview') {
+      // saldos das contas, investimentos e empréstimos (para patrimônio, dívidas e conferência de saldo)
+      const accounts = []
+      const investments = []
+      const loans = []
+      const errors: string[] = []
+      for (const id of itemIds) {
+        try {
+          const acc = await pget(key, `/accounts?itemId=${id}`)
+          for (const a of acc.results ?? []) {
+            accounts.push({
+              itemId: id,
+              id: a.id,
+              type: a.type,
+              subtype: a.subtype,
+              name: a.marketingName ?? a.name,
+              number: a.number,
+              balanceCents: Math.round(Number(a.balance ?? 0) * 100),
+              overdraftLimitCents:
+                a.bankData?.overdraftContractedLimit != null ? Math.round(Number(a.bankData.overdraftContractedLimit) * 100) : null,
+            })
+          }
+        } catch (e) {
+          errors.push(`contas ${id}: ${(e as Error).message}`)
+        }
+        try {
+          const inv = await pget(key, `/investments?itemId=${id}&pageSize=200`)
+          for (const v of inv.results ?? []) {
+            if (v.status && v.status !== 'ACTIVE') continue
+            investments.push({
+              itemId: id,
+              id: v.id,
+              name: v.name,
+              type: v.type,
+              subtype: v.subtype ?? null,
+              balanceCents: Math.round(Number(v.balance ?? v.amount ?? 0) * 100),
+              lastMonthRate: v.lastMonthRate ?? null,
+              annualRate: v.annualRate ?? null,
+              dueDate: v.dueDate ? String(v.dueDate).slice(0, 10) : null,
+            })
+          }
+        } catch (e) {
+          errors.push(`investimentos ${id}: ${(e as Error).message}`)
+        }
+        try {
+          const ln = await pget(key, `/loans?itemId=${id}&pageSize=100`)
+          for (const l of ln.results ?? []) {
+            const ins = (l.installments ?? {}) as Record<string, unknown>
+            const pay = (l.payments ?? {}) as Record<string, unknown>
+            loans.push({
+              itemId: id,
+              id: l.id,
+              name: l.productName ?? l.type ?? 'Empréstimo',
+              type: l.type ?? null,
+              contractCents: l.contractAmount != null ? Math.round(Number(l.contractAmount) * 100) : null,
+              outstandingCents:
+                pay.contractOutstandingBalance != null ? Math.round(Number(pay.contractOutstandingBalance) * 100) : null,
+              total: ins.totalNumberOfInstallments ?? null,
+              paid: ins.paidInstallments ?? null,
+              due: ins.dueInstallments ?? null,
+              pastDue: ins.pastDueInstallments ?? null,
+              dueDate: l.dueDate ? String(l.dueDate).slice(0, 10) : null,
+              cet: l.CET ?? null,
+            })
+          }
+        } catch (e) {
+          errors.push(`empréstimos ${id}: ${(e as Error).message}`)
+        }
+      }
+      const at = new Date().toISOString()
+      return new Response(JSON.stringify({ ok: true, at, accounts, investments, loans, errors }), { headers })
     }
 
     if (body.action === 'cards') {

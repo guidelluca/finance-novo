@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { HomeDashboard } from '@/components/finance/HomeDashboard'
+import { OfAlerts } from '@/components/finance/OfAlerts'
 import { useCoverage } from '@/hooks/useCoverage'
 import { readHouse } from '@/lib/house'
 import { useMonthData } from '@/hooks/useMonthData'
@@ -94,6 +95,10 @@ export function HomePage() {
       .reduce((s, t) => s + t.amountCents, 0)
   }, [history, month, refDay, today, periods])
   const delta = prevSoFar ? spentSoFar / prevSoFar - 1 : null
+  const pace = useMemo(
+    () => (isCurrent && delta != null && Number.isFinite(delta) && prevSoFar ? { deltaPct: delta, spentCents: spentSoFar, prevCents: prevSoFar } : null),
+    [isCurrent, delta, spentSoFar, prevSoFar],
+  )
 
   const recurring = useMemo(
     () => detectRecurring(month, monthTxs, history, (user?.user_metadata?.owner_name as string | undefined) ?? null, readHouse(user)),
@@ -156,6 +161,8 @@ export function HomePage() {
       </div>
 
       {error ? <p className="rounded-2xl border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{error}</p> : null}
+
+      <OfAlerts today={today} pace={pace} />
 
       {/* Cartão escuro */}
       <section className="space-y-[18px] rounded-[28px] bg-ink p-[22px] text-[#f2f3ee]" aria-label="Resumo do mês">

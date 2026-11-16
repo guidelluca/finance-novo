@@ -11,7 +11,7 @@
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 
-export type GoalMeta = { keywords: string[]; exclude: string[] }
+export type GoalMeta = { keywords: string[]; exclude: string[]; /** investimentos/caixinhas do Open Finance que são desta meta */ investmentIds?: string[] }
 export type LinkedTx = { id: string; date: string; amountCents: number; description: string; kind: 'debit' | 'credit' }
 
 /** Palavras-chave padrão para metas de viagem (companhias, hotéis, agências). */
@@ -23,7 +23,8 @@ export const TRAVEL_KEYWORDS = [
 export function readGoalMeta(user: User | null, goalId: string, goalName: string): GoalMeta {
   const raw = (user?.user_metadata?.goal_meta ?? {}) as Record<string, Partial<GoalMeta>>
   const m = raw[goalId]
-  if (m && Array.isArray(m.keywords)) return { keywords: m.keywords, exclude: Array.isArray(m.exclude) ? m.exclude : [] }
+  if (m && Array.isArray(m.keywords))
+    return { keywords: m.keywords, exclude: Array.isArray(m.exclude) ? m.exclude : [], investmentIds: Array.isArray(m.investmentIds) ? m.investmentIds : [] }
   // sem configuração: meta de viagem já começa procurando passagens e hospedagem
   return { keywords: /viag|trip|europa|f[eé]rias|passage|interc[aâ]mbio/i.test(goalName) ? TRAVEL_KEYWORDS : [], exclude: [] }
 }

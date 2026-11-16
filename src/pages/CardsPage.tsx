@@ -2,7 +2,9 @@ import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { CreditCard as CardIcon, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { FutureInstallments } from '@/components/finance/FutureInstallments'
 import { OfCardsPanel } from '@/components/finance/OfCardsPanel'
+import { useRecentTxs } from '@/hooks/useRecentTxs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -57,6 +59,7 @@ function centsToBr(cents: number | null | undefined): string {
 
 export function CardsPage() {
   const { user } = useAuth()
+  const { txs: recentTxs } = useRecentTxs(400)
   const [cards, setCards] = useState<CreditCard[]>([])
   const [txs, setTxs] = useState<TxWithCat[]>([])
   const [loading, setLoading] = useState(true)
@@ -225,6 +228,7 @@ export function CardsPage() {
       ) : null}
 
       <OfCardsPanel />
+      <FutureInstallments txs={recentTxs} today={new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10)} />
 
       {showForm ? (
         <Card>

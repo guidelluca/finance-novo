@@ -5,6 +5,7 @@ import { FinanceAiProvider } from '@/contexts/FinanceAiContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { isSupabaseConfigured } from '@/lib/supabase'
 import { CardsPage } from '@/pages/CardsPage'
+import { PanoramaPage } from '@/pages/PanoramaPage'
 import { CategoriesPage } from '@/pages/CategoriesPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { FinanceAnalysisPage } from '@/pages/FinanceAnalysisPage'
@@ -66,6 +67,7 @@ function AppRoutes() {
             <Route path="casa" element={<CasaPage />} />
             <Route path="viagens" element={<TripsPage />} />
             <Route path="open-finance" element={<OpenFinancePage />} />
+            <Route path="panorama" element={<PanoramaPage />} />
             <Route path="viagens/:id" element={<TripsPage />} />
             <Route path="seguranca" element={<SecurityPage />} />
             <Route path="analysis" element={<FinanceAnalysisPage />} />

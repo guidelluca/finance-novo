@@ -93,10 +93,27 @@ function localDate(iso: string): string {
   return new Date(d.getTime() - 3 * 3_600_000).toISOString().slice(0, 10)
 }
 
+const OWN_TRANSFER_CATS = /^same person transfer$/i
+const CARD_PAYMENT_CATS = /^credit card payment$/i
+const INVEST_CATS = /^(investments|automatic investment|fixed income|mutual funds|variable income|pension)$/i
+/** Marca que vai junto da descrição ("· entre contas suas", "· pagamento de fatura", "· aplicação/resgate"). */
+export function pluggyTag(cat: string | null | undefined, desc: string, isCard: boolean): string {
+  if (!cat) return ''
+  if (OWN_TRANSFER_CATS.test(cat) && !/entre contas suas|conta pr[oó]pria/i.test(desc)) return ' · entre contas suas'
+  if (!isCard && CARD_PAYMENT_CATS.test(cat) && !/fatura/i.test(desc)) return ' · pagamento de fatura'
+  if (INVEST_CATS.test(cat) && !/aplica|resgate|rdb|cdb|cofrinho|caixinha|invest|poupan/i.test(desc)) return ' · investimento'
+  return ''
+}
+
 const PAYMENT = /pagamento (recebido|de fatura|fatura)|pgto fatura|pagto fatura|pag fatura/i
 
 /** Busca as transações das conexões e devolve lançamentos prontos para revisão. */
-export async function fetchOpenFinanceDrafts(conns: OfConnection[], from: string, to: string): Promise<{ drafts: TransactionDraft[]; warnings: string[] }> {
+export async function fetchOpenFinanceDrafts(
+  conns: OfConnection[],
+  from: string,
+  to: string,
+  opts: { markSynced?: boolean } = {},
+): Promise<{ drafts: TransactionDraft[]; warnings: string[] }> {
   const r = await call<{ from: string; to: string; accounts: OfAccount[] }>({ action: 'transactions', itemIds: conns.map((c) => c.itemId), from, to })
   const bankOf = new Map(conns.map((c) => [c.itemId, c.bank]))
   const drafts: TransactionDraft[] = []
@@ -112,7 +129,10 @@ export async function fetchOpenFinanceDrafts(conns: OfConnection[], from: string
       const cents = Math.round(value * 100)
       if (!cents) continue
       const inst = t.installment?.n && t.installment.of && t.installment.of > 1 ? ` (parcela ${t.installment.n}/${t.installment.of})` : ''
-      const desc = `${(t.description || t.merchant || 'Sem descrição').replace(/\s+/g, ' ').trim()}${inst}`
+      const base = `${(t.description || t.merchant || 'Sem descrição').replace(/\s+/g, ' ').trim()}${inst}`
+      // a Pluggy já sabe o que é transferência entre contas suas, pagamento de fatura e aplicação:
+      // deixa isso escrito na descrição para o fechamento do mês tirar da soma automaticamente
+      const desc = base + pluggyTag(t.category, base, isCard)
       const kind = t.type === 'CREDIT' ? 'credit' : 'debit'
       // no cartão, "pagamento recebido" é a fatura paga pela conta: já aparece no extrato do banco
       const cardPayment = isCard && kind === 'credit' && PAYMENT.test(desc)
@@ -140,7 +160,7 @@ export async function fetchOpenFinanceDrafts(conns: OfConnection[], from: string
   drafts.sort((x, y) => (x.date < y.date ? 1 : -1))
   warnings.push(`Open Finance (Meu Pluggy): ${drafts.length} lançamento(s) de ${r.accounts.length} conta(s)/cartão(ões), de ${r.from.split('-').reverse().join('/')} a ${r.to.split('-').reverse().join('/')}.`)
   if (pending) warnings.push(`${pending} lançamento(s) ainda pendente(s) no banco.`)
-  await supabase.auth.updateUser({ data: { pluggy_last_sync: new Date().toISOString() } }).catch(() => undefined)
+  if (opts.markSynced !== false) await supabase.auth.updateUser({ data: { pluggy_last_sync: new Date().toISOString() } }).catch(() => undefined)
   return { drafts, warnings }
 }
 
@@ -201,4 +221,85 @@ function addDays(iso: string, n: number) {
   const d = new Date(`${iso}T12:00:00Z`)
   d.setUTCDate(d.getUTCDate() + n)
   return d.toISOString().slice(0, 10)
+}
+
+/* ------------------------------------------------------------ visão geral: saldos, investimentos, empréstimos */
+
+export type OfOverview = {
+  at: string
+  accounts: { itemId: string; id: string; type: string; subtype: string; name: string; number: string; balanceCents: number; overdraftLimitCents: number | null; bank: string; label: string }[]
+  investments: { itemId: string; id: string; name: string; type: string; subtype: string | null; balanceCents: number; lastMonthRate: number | null; annualRate: number | null; dueDate: string | null; bank: string }[]
+  loans: { itemId: string; id: string; name: string; type: string | null; contractCents: number | null; outstandingCents: number | null; total: number | null; paid: number | null; due: number | null; pastDue: number | null; dueDate: string | null; cet: number | null; bank: string }[]
+  errors: string[]
+}
+
+/** Rótulo de conta igual ao que os lançamentos do Open Finance recebem ("Itaú", "Cartão Itaú"). */
+export function ofAccountLabel(bank: string, type: string): string {
+  return type === 'CREDIT' ? `Cartão ${bank.replace(/^Banco\s+/i, '')}` : bank
+}
+
+export async function ofOverview(conns: OfConnection[]): Promise<OfOverview> {
+  const r = await call<Omit<OfOverview, 'accounts' | 'investments' | 'loans'> & {
+    accounts: Omit<OfOverview['accounts'][number], 'bank' | 'label'>[]
+    investments: Omit<OfOverview['investments'][number], 'bank'>[]
+    loans: Omit<OfOverview['loans'][number], 'bank'>[]
+  }>({ action: 'overview', itemIds: conns.map((c) => c.itemId) })
+  const bank = new Map(conns.map((c) => [c.itemId, c.bank]))
+  const b = (id: string) => bank.get(id) ?? 'Banco'
+  const out: OfOverview = {
+    at: r.at,
+    errors: r.errors ?? [],
+    accounts: r.accounts.map((a) => ({ ...a, bank: b(a.itemId), label: ofAccountLabel(b(a.itemId), a.type) })),
+    investments: r.investments.map((v) => ({ ...v, bank: b(v.itemId) })),
+    loans: r.loans.map((l) => ({ ...l, bank: b(l.itemId) })),
+  }
+  try {
+    localStorage.setItem('finance:of-overview', JSON.stringify(out))
+  } catch {
+    /* sem armazenamento */
+  }
+  saveBalanceSnapshot(out)
+  return out
+}
+
+export function readOverviewCache(): OfOverview | null {
+  try {
+    const raw = localStorage.getItem('finance:of-overview')
+    return raw ? (JSON.parse(raw) as OfOverview) : null
+  } catch {
+    return null
+  }
+}
+
+/** Foto diária do saldo de cada conta (não cartão): { "2026-11-16T15:00": { "Itaú": 12345 } } */
+export type BalanceSnapshot = { at: string; balances: Record<string, number> }
+const SNAP_KEY = 'finance:of-balance-snapshots'
+
+export function readBalanceSnapshots(): BalanceSnapshot[] {
+  try {
+    const raw = localStorage.getItem(SNAP_KEY)
+    return raw ? (JSON.parse(raw) as BalanceSnapshot[]) : []
+  } catch {
+    return []
+  }
+}
+
+function saveBalanceSnapshot(o: OfOverview) {
+  const balances: Record<string, number> = {}
+  for (const a of o.accounts) {
+    if (a.type === 'CREDIT') continue
+    balances[a.label] = (balances[a.label] ?? 0) + a.balanceCents
+  }
+  if (!Object.keys(balances).length) return
+  const list = readBalanceSnapshots()
+  const day = o.at.slice(0, 10)
+  // uma foto por dia (a última do dia vale)
+  const kept = list.filter((x) => x.at.slice(0, 10) !== day)
+  kept.push({ at: o.at, balances })
+  kept.sort((x, y) => (x.at < y.at ? -1 : 1))
+  try {
+    localStorage.setItem(SNAP_KEY, JSON.stringify(kept.slice(-120)))
+  } catch {
+    /* sem armazenamento */
+  }
 }

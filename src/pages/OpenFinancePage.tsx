@@ -140,6 +140,9 @@ export function OpenFinancePage() {
         <p className="text-sm text-muted">Seus bancos entram sozinhos, só leitura, pelo Meu Pluggy (grátis para uso pessoal, até 5 conexões).</p>
       </header>
       {err ? <p className="rounded-2xl border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{err}</p> : null}
+      <Link to="/panorama" className="flex items-center justify-between rounded-2xl bg-accent-muted p-3 text-sm font-semibold">
+        Panorama: patrimônio, saldos, investimentos, dívidas, assinaturas e alertas <span aria-hidden>→</span>
+      </Link>
       <OfCardsPanel compact />
 
       <section className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">

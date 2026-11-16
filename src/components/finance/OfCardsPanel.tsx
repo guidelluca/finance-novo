@@ -37,7 +37,7 @@ export function OfCardsPanel({ compact = false }: { compact?: boolean }) {
   const today = data?.today ?? new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10)
 
   return (
-    <section className="space-y-2.5 rounded-3xl bg-card p-4 shadow-sm">
+    <section className="space-y-2.5 rounded-3xl border border-border bg-surface p-4">
       <div className="flex items-center gap-2">
         <CreditCard className="size-4 text-muted" />
         <h2 className="flex-1 text-sm font-semibold">Limite consumido × fatura do mês</h2>
