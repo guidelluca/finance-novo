@@ -764,19 +764,24 @@ export function ImportPage() {
 
   // ---------- Open Finance (Meu Pluggy)
   const ofConns = readConnections(user)
-  const [ofDays, setOfDays] = useState<'last' | '30' | '90'>('last')
+  const [ofDays, setOfDays] = useState<'last' | '30' | '90' | '365'>('last')
   const [ofError, setOfError] = useState<string | null>(null)
-  const runOpenFinance = async () => {
+  const runOpenFinance = async (days?: 'last' | '30' | '90' | '365') => {
     if (!user || !ofConns.length) return
     setOfError(null)
     setBusy(true)
     try {
       const today = format(new Date(), 'yyyy-MM-dd')
       const last = lastSync(user)
-      const days = ofDays === '30' ? 30 : ofDays === '90' ? 90 : last ? Math.max(3, Math.ceil((Date.now() - Date.parse(last)) / 86_400_000) + 3) : 35
-      const from = format(new Date(Date.now() - Math.min(365, days) * 86_400_000), 'yyyy-MM-dd')
+      const mode = days ?? ofDays
+      // "desde a última": volta 10 dias antes do último salvamento (o que já está no app vem desmarcado)
+      const n = mode === '30' ? 30 : mode === '90' ? 90 : mode === '365' ? 365 : last ? Math.max(15, Math.ceil((Date.now() - Date.parse(last)) / 86_400_000) + 10) : 45
+      const from = format(new Date(Date.now() - Math.min(365, n) * 86_400_000), 'yyyy-MM-dd')
       setProgress('Buscando nos bancos (Open Finance)…')
-      const r = await fetchOpenFinanceDrafts(ofConns, from, today)
+      const r = await fetchOpenFinanceDrafts(ofConns, from, today, {
+        markSynced: false,
+        onProgress: (d, t) => setProgress(`Buscando nos bancos (Open Finance)… ${Math.round((d / t) * 100)}%`),
+      })
       if (!r.drafts.length) {
         setOfError('Nenhum lançamento novo nesse período. Se você acabou de conectar, espere a primeira atualização do Meu Pluggy (até 24 h).')
         return
@@ -816,9 +821,11 @@ export function ImportPage() {
   // vindo do aviso "lançamentos novos nos bancos" da Home: já busca direto
   const autoOfRan = useRef(false)
   useEffect(() => {
-    if (autoOfRan.current || searchParams.get('of') !== '1' || !user || !ofConns.length) return
+    const of = searchParams.get('of')
+    if (autoOfRan.current || !of || !user || !ofConns.length) return
     autoOfRan.current = true
-    void runOpenFinance()
+    if (of === 'all') setOfDays('365')
+    void runOpenFinance(of === 'all' ? '365' : undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, searchParams])
 
@@ -1097,6 +1104,10 @@ export function ImportPage() {
       )
       setDetectedBank(null)
 
+      // Open Finance: "desde a última busca" passa a contar a partir daqui (só depois de salvar)
+      if (lastParserId === 'open_finance_pluggy_v1')
+        await supabase.auth.updateUser({ data: { pluggy_last_sync: new Date().toISOString() } }).catch(() => undefined)
+
       // salário novo pode mudar o dia em que o mês financeiro começa
       if (toSave.some((d) => d.kind === 'credit' && SALARY_RE.test(d.descriptionRaw))) void refreshSalaryAnchors(user.id)
       setStep('pick')
@@ -1247,6 +1258,7 @@ export function ImportPage() {
                 <option value="last">Desde a última busca</option>
                 <option value="30">Últimos 30 dias</option>
                 <option value="90">Últimos 90 dias</option>
+                <option value="365">Tudo (12 meses)</option>
               </select>
               <Button className="h-10" disabled={busy} onClick={() => void runOpenFinance()}>
                 {busy && progress?.startsWith('Buscando') ? 'Buscando…' : 'Buscar lançamentos'}

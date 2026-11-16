@@ -51,7 +51,8 @@ export async function autoSync(user: User, opts: { force?: boolean } = {}): Prom
   running.on = true
   const to = iso(Date.now())
   const last = lastSync(user)
-  const from = iso(last ? Date.parse(last) - 3 * 86_400_000 : Date.now() - 35 * 86_400_000)
+  // sempre olha pelo menos 45 dias (o que já está no app não conta como novo)
+  const from = iso(Math.min(Date.now() - 45 * 86_400_000, last ? Date.parse(last) - 10 * 86_400_000 : Infinity))
   const state: AutoSyncState = { at: new Date().toISOString(), fresh: 0, from, to, tagged: 0, error: null }
   try {
     // saldos/cartões primeiro (são rápidos e não dependem do resto)

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { seedDefaultCategoriesIfEmpty, seedDefaultRulesIfEmpty } from '@/lib/seedCategories'
+import { fetchHouseSheet, readSheetCache, sheetTabForPayment } from '@/lib/houseSheet'
 import { autoSync } from '@/lib/ofAutoSync'
 import { autoCategorizeExisting, ensureFoodTree, fixWalletCategories } from '@/lib/categorize'
 import { supabase } from '@/lib/supabase'
@@ -32,6 +33,7 @@ const secondaryNav: NavItem[] = [
   { to: '/panorama', icon: Scale, label: 'Panorama dos bancos' },
   { to: '/open-finance', icon: Landmark, label: 'Open Finance (bancos)' },
   { to: '/mes', icon: CalendarDays, label: 'Mês consolidado' },
+  { to: '/credito', icon: CreditCard, label: 'Crédito (análise dos cartões)' },
   { to: '/cards', icon: CreditCard, label: 'Cartões' },
   { to: '/analysis', icon: Sparkles, label: 'Análise IA' },
   { to: '/savings', icon: PiggyBank, label: 'Poupança' },
@@ -79,6 +81,17 @@ export function AppShell() {
     const t = window.setTimeout(() => void autoSync(user).catch(() => undefined), 2500)
     return () => window.clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid])
+
+  // planilha da casa: o aluguel vem só dela, então as abas do mês atual e do anterior ficam sempre lidas
+  useEffect(() => {
+    if (!uid) return
+    const now = new Date(Date.now() - 3 * 3_600_000)
+    const tabs = new Set([sheetTabForPayment(now.toISOString().slice(0, 10)), sheetTabForPayment(new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10))])
+    for (const tab of tabs) {
+      const c = readSheetCache(tab)
+      if (!c || Date.now() - Date.parse(c.fetchedAt) > 6 * 3_600_000) void fetchHouseSheet(tab).catch(() => undefined)
+    }
   }, [uid])
 
   const isSecondaryActive = secondaryNav.some((it) => location.pathname === it.to)

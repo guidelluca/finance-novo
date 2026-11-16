@@ -306,49 +306,24 @@ export function CasaPage() {
         {cx.totalCents ? (
           <p className="text-sm">
             {formatBRLFromCents(cx.totalCents)} ÷ {cx.people} = <strong>{formatBRLFromCents(cx.shareCents)}</strong> por pessoa
-            {rents.length ? ' · somado ao seu aluguel' : ' · ainda não achei o pagamento do aluguel neste mês para somar'}
+            {' · só para controle da casa (seu aluguel é o valor da planilha)'}
           </p>
         ) : null}
       </section>
 
       {rents.map((r) => r.sheet ? <SheetRentCard key={r.txId} r={r} /> : (
-        <section key={r.txId} className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">
+        <section key={r.txId} className="space-y-2 rounded-3xl border border-border bg-surface p-[18px]">
           <div className="flex items-baseline justify-between">
             <h2 className="text-base font-semibold">Aluguel de {d2(r.date)}</h2>
             <span className="text-sm text-muted">{formatBRLFromCents(r.paidCents)}</span>
           </div>
-          <dl className="space-y-1 text-sm">
-            {r.from.map((f) => (
-              <div key={f.txId} className="flex justify-between gap-3">
-                <dt className="truncate text-muted">
-                  {f.who} · {d2(f.date)}
-                </dt>
-                <dd className="shrink-0 tabular-nums">− {formatBRLFromCents(f.cents)}</dd>
-              </div>
-            ))}
-            {r.caixinhaCents ? (
-              <>
-                <div className="flex justify-between gap-3 border-t border-border pt-1.5">
-                  <dt className="text-muted">{r.rentPartCents >= 0 ? 'Sua parte do aluguel' : 'Sobrou do aluguel'}</dt>
-                  <dd className="shrink-0 tabular-nums">{formatBRLFromCents(Math.abs(r.rentPartCents))}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted">
-                    + caixinha {formatBRLFromCents(r.caixinhaTotalCents)} ÷ {cx.people}
-                  </dt>
-                  <dd className="shrink-0 tabular-nums">+ {formatBRLFromCents(r.caixinhaCents)}</dd>
-                </div>
-              </>
-            ) : null}
-            <div className="flex justify-between gap-3 border-t border-border pt-1.5 font-semibold">
-              <dt>{r.shareCents >= 0 ? 'Seu aluguel no mês (conta como seu gasto)' : 'Sobrou com a casa'}</dt>
-              <dd className="shrink-0 tabular-nums">{formatBRLFromCents(Math.abs(r.shareCents))}</dd>
-            </div>
-          </dl>
-          <p className="text-xs text-muted">
-            Só a sua parte entra nas suas saídas do mês. Uso os Pix de cada morador de até 25 dias antes a 10 dias depois do aluguel (a partir de{' '}
-            {formatBRLFromCents(RENT_PIX_MIN)}; menores contam como caixinha).
+          <p className="text-sm text-muted">
+            Seu aluguel é o valor da sua linha na planilha da casa ({r.sheetTab}). A planilha desse mês ainda não foi lida, então este pagamento
+            ainda não conta nas suas saídas.
           </p>
+          <Button size="sm" variant="secondary" disabled={sheetState.loading} onClick={() => void fetchHouseSheet(r.sheetTab).catch(() => undefined)}>
+            Ler planilha {r.sheetTab}
+          </Button>
         </section>
       ))}
 
@@ -365,9 +340,7 @@ export function CasaPage() {
             <span className="text-xs text-muted">previsto · pago entre 10 e 15</span>
           </div>
           <dl className="space-y-1 text-sm">
-            <div className="flex justify-between"><dt>Aluguel ({result.plannedRent.nome})</dt><dd className="tabular-nums">{formatBRLFromCents(result.plannedRent.aluguelCents)}</dd></div>
-            <div className="flex justify-between"><dt>Caixinha</dt><dd className="tabular-nums">+ {formatBRLFromCents(result.plannedRent.caixinhaCents)}</dd></div>
-            <div className="flex justify-between border-t border-border pt-1.5 font-semibold"><dt>Seu gasto de casa no mês</dt><dd className="tabular-nums">{formatBRLFromCents(result.plannedRent.cents)}</dd></div>
+            <div className="flex justify-between font-semibold"><dt>Aluguel ({result.plannedRent.nome})</dt><dd className="tabular-nums">{formatBRLFromCents(result.plannedRent.aluguelCents)}</dd></div>
           </dl>
           <p className="text-xs text-muted">
             Já entra nas suas saídas do mês. Quando o pagamento à imobiliária aparecer no extrato, o app confere cada morador com a planilha.
@@ -519,12 +492,11 @@ function SheetRentCard({ r }: { r: RentShare }) {
 
       <div className="space-y-1 rounded-2xl bg-background p-3 text-sm">
         <p className="text-xs text-muted">Sua linha na planilha ({sh.me.nome})</p>
-        <div className="flex justify-between"><span>Aluguel</span><span className="tabular-nums">{brl(sh.me.aluguelCents)}</span></div>
-        <div className="flex justify-between"><span>Caixinha</span><span className="tabular-nums">+ {brl(sh.me.caixinhaCents)}</span></div>
-        <div className="flex justify-between border-t border-border pt-1.5 font-semibold">
-          <span>Seu gasto de casa no mês</span>
+        <div className="flex justify-between font-semibold">
+          <span>Seu aluguel (coluna Aluguel)</span>
           <span className="tabular-nums">{brl(r.shareCents)}</span>
         </div>
+        <p className="text-[11px] text-muted">É só esse valor que entra nas suas saídas do mês.</p>
       </div>
 
       <ul className="space-y-1.5 text-sm">

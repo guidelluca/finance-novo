@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FutureInstallments } from '@/components/finance/FutureInstallments'
 import { OfCardsPanel } from '@/components/finance/OfCardsPanel'
 import { useRecentTxs } from '@/hooks/useRecentTxs'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -227,6 +228,9 @@ export function CardsPage() {
         <p className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>
       ) : null}
 
+      <Link to="/credito" className="flex items-center justify-between rounded-2xl bg-accent-muted p-3 text-sm font-semibold">
+        Análise do gasto no crédito: ritmo, categorias, parcelas e lojas <span aria-hidden>→</span>
+      </Link>
       <OfCardsPanel />
       <FutureInstallments txs={recentTxs} today={new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10)} />
 

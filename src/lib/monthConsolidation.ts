@@ -5,7 +5,7 @@
  *
  * Sem dependências externas (testável isoladamente). Nada é apagado aqui: só classifica.
  */
-import { caixinhaShare, classifyHouse, residentOf, selfResident, type HouseConfig } from '@/lib/house'
+import { classifyHouse, residentOf, selfResident, type HouseConfig } from '@/lib/house'
 import { sheetTabForPayment, type SheetResident } from '@/lib/houseSheet'
 import { identifyMerchant } from './merchantIdentify'
 
@@ -378,12 +378,13 @@ export function consolidateMonth(
 
       let shareCents: number
       let cxCents = 0
-      let cxTotal = 0
+      const cxTotal = 0
       let sheetCheck: RentShare['sheet'] = null
       const me = sheet ? selfResident(sheet.residents, house, ownerName) : null
       if (sheet && me && rentShares.every((r) => r.sheet?.tab !== tab)) {
-        shareCents = me.aluguelCents + me.caixinhaCents
-        cxCents = me.caixinhaCents
+        // seu aluguel é o valor da coluna Aluguel da SUA linha na planilha — e nada mais
+        shareCents = me.aluguelCents
+        cxCents = 0
         const members = house.members.map((m) => {
           const row = residentOf(m, sheet.residents)
           return {
@@ -395,11 +396,9 @@ export function consolidateMonth(
         })
         sheetCheck = { tab, label: sheet.label, fetchedAt: sheet.fetchedAt, me, members, aluguelSumCents: sheet.aluguelSumCents }
       } else {
-        // caixinha do mês digitada à mão, dividida entre os moradores (uma vez por mês)
-        const cx = rentShares.length === 0 ? caixinhaShare(house, month) : { totalCents: 0, shareCents: 0 }
-        cxCents = cx.shareCents
-        cxTotal = cx.totalCents
-        shareCents = rentPartCents + cx.shareCents
+        // sem a planilha daquele mês não há valor de aluguel: o pagamento fica fora da soma
+        // até a planilha ser lida (o app lê sozinho ao abrir)
+        shareCents = 0
       }
       rentShares.push({
         txId: pay.id,
@@ -431,7 +430,7 @@ export function consolidateMonth(
     const tab = sheetTabForPayment(`${month}-15`)
     const sheet = house.sheets[tab]
     const me = sheet ? selfResident(sheet.residents, house, ownerName) : null
-    const cents = me ? me.aluguelCents + me.caixinhaCents : 0
+    const cents = me ? me.aluguelCents : 0
     if (sheet && me && cents > 0 && !rentShares.some((r) => r.sheetTab === tab)) {
       // usa a sua categoria de aluguel/moradia, se já existir em algum lançamento
       const cat = [...items, ...hist].find((t) => t.categoryId && t.categoryName && /aluguel|moradia|casa/i.test(t.categoryName))

@@ -541,8 +541,7 @@ export function ExtratoPage() {
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium">Aluguel {cons.result.plannedRent.label} · previsto</span>
             <span className="block text-xs text-muted">
-              Da planilha: aluguel {formatBRLFromCents(cons.result.plannedRent.aluguelCents)} + caixinha{' '}
-              {formatBRLFromCents(cons.result.plannedRent.caixinhaCents)}. Já conta nas saídas; vira o pagamento real quando ele entrar no extrato.
+              Da planilha: aluguel {formatBRLFromCents(cons.result.plannedRent.aluguelCents)}. Já conta nas saídas; vira o pagamento real quando ele entrar no extrato.
             </span>
           </span>
           <span className="shrink-0 text-sm font-semibold tabular-nums">−{formatBRLFromCents(cons.result.plannedRent.cents)}</span>
@@ -619,9 +618,9 @@ export function ExtratoPage() {
                         {rent ? (
                           <div className="space-y-1 rounded-xl bg-background p-2.5 text-xs">
                             <p className="font-semibold">
-                              Aluguel {formatBRLFromCents(rent.paidCents)} − moradores {formatBRLFromCents(rent.receivedCents)}
-                              {rent.caixinhaCents ? ` + caixinha ${formatBRLFromCents(rent.caixinhaCents)}` : ''} ={' '}
-                              {rent.shareCents > 0 ? `seu aluguel ${formatBRLFromCents(rent.shareCents)}` : 'nada para você'}
+                              {rent.sheet
+                                ? `Pago ${formatBRLFromCents(rent.paidCents)} à imobiliária · seu aluguel pela planilha ${rent.sheet.label}: ${formatBRLFromCents(rent.shareCents)}`
+                                : `Pago ${formatBRLFromCents(rent.paidCents)} · seu aluguel vem da planilha ${rent.sheetTab}, que ainda não foi lida`}
                             </p>
                             {rent.from.length ? (
                               <ul className="text-muted">

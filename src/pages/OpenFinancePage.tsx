@@ -143,6 +143,9 @@ export function OpenFinancePage() {
       <Link to="/panorama" className="flex items-center justify-between rounded-2xl bg-accent-muted p-3 text-sm font-semibold">
         Panorama: patrimônio, saldos, investimentos, dívidas, assinaturas e alertas <span aria-hidden>→</span>
       </Link>
+      <Link to="/import?of=all" className="flex items-center justify-between rounded-2xl border border-border bg-surface p-3 text-sm font-semibold">
+        Trazer tudo dos bancos (12 meses), sem repetir o que já está no app <span aria-hidden>→</span>
+      </Link>
       <OfCardsPanel compact />
 
       <section className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">

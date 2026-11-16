@@ -112,9 +112,42 @@ export async function fetchOpenFinanceDrafts(
   conns: OfConnection[],
   from: string,
   to: string,
-  opts: { markSynced?: boolean } = {},
+  opts: { markSynced?: boolean; onProgress?: (done: number, total: number) => void } = {},
 ): Promise<{ drafts: TransactionDraft[]; warnings: string[] }> {
-  const r = await call<{ from: string; to: string; accounts: OfAccount[] }>({ action: 'transactions', itemIds: conns.map((c) => c.itemId), from, to })
+  // períodos longos vão em pedaços de ~2 meses, um banco por vez (a função tem limite de tempo)
+  // e o fim vai 1 dia além de hoje: o filtro da Pluggy é em UTC e lançamentos da noite caíam fora
+  const plusDay = (iso: string, n: number) => {
+    const d = new Date(`${iso}T12:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + n)
+    return d.toISOString().slice(0, 10)
+  }
+  const chunks: [string, string][] = []
+  for (let a = plusDay(from, -1); a <= plusDay(to, 1); a = plusDay(a, 61)) {
+    const b = plusDay(a, 60)
+    chunks.push([a, b < plusDay(to, 1) ? b : plusDay(to, 1)])
+  }
+  const accById = new Map<string, OfAccount>()
+  const seenTx = new Set<string>()
+  const jobs = conns.flatMap((c) => chunks.map((ch) => ({ c, ch })))
+  let done = 0
+  for (const { c, ch } of jobs) {
+    const part = await call<{ from: string; to: string; accounts: OfAccount[] }>({ action: 'transactions', itemIds: [c.itemId], from: ch[0], to: ch[1] })
+    for (const a of part.accounts) {
+      const cur = accById.get(a.account.id) ?? { ...a, transactions: [] }
+      for (const t of a.transactions) {
+        if (seenTx.has(t.id)) continue
+        seenTx.add(t.id)
+        // lançamento de fora do período pedido (por causa da folga de 1 dia) fica de fora
+        const d = localDate(t.date)
+        if (d < from || d > to) continue
+        cur.transactions.push(t)
+      }
+      accById.set(a.account.id, cur)
+    }
+    done += 1
+    opts.onProgress?.(done, jobs.length)
+  }
+  const r = { from, to, accounts: [...accById.values()] }
   const bankOf = new Map(conns.map((c) => [c.itemId, c.bank]))
   const drafts: TransactionDraft[] = []
   const warnings: string[] = []

@@ -1,6 +1,6 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, ClipboardCheck, House, Plus, Sparkles, Upload } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ClipboardCheck, CreditCard, House, Plus, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -261,9 +261,9 @@ export function HomePage() {
 
       {/* Atalhos */}
       <div className="grid grid-cols-4 gap-2">
-        <Link to="/import" className="flex flex-col items-center gap-2 rounded-[18px] border border-border bg-surface px-2.5 py-3.5 text-[13px] font-medium">
-          <Upload className="size-[22px]" strokeWidth={1.8} />
-          Importar
+        <Link to="/credito" className="flex flex-col items-center gap-2 rounded-[18px] border border-border bg-surface px-2.5 py-3.5 text-[13px] font-medium">
+          <CreditCard className="size-[22px]" strokeWidth={1.8} />
+          Crédito
         </Link>
         <Link to="/transactions?new=1" className="flex flex-col items-center gap-2 rounded-[18px] border border-border bg-surface px-2.5 py-3.5 text-[13px] font-medium">
           <Plus className="size-[22px]" strokeWidth={1.8} />
