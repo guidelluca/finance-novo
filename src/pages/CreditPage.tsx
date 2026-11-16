@@ -402,8 +402,8 @@ export function CreditPage() {
                     <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                       {([
                         ['Parcelas do mês', l.installmentsCents],
-                        ['Pagou de fatura', l.paidCents || null],
-                        ['A pagar (banco)', l.toPayCents],
+                        ['Fatura paga', l.paidCents || null],
+                        ['A pagar', l.toPayCents],
                         ['Parcelas futuras', l.futureCents || null],
                       ] as [string, number | null][]).map(([k, v]) => (
                         <div key={k} className="flex justify-between gap-2">
