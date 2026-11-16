@@ -37,7 +37,9 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
     } catch {
       /* corpo não é JSON */
     }
-    if (status === 404) {
+    if (/a[cç][aã]o desconhecida/i.test(msg)) {
+      msg = 'A função "pluggy-sync" no Supabase está com o código antigo. Copie o código de novo (Open Finance → passo 4) e clique em Deploy.'
+    } else if (status === 404) {
       msg = 'Não achei a função "pluggy-sync" no Supabase. Confira no passo 4 se ela foi publicada com esse nome exato (tudo minúsculo, com hífen).'
     } else if (status === 401 && !/entre no app/i.test(msg)) {
       msg = 'O Supabase recusou o login ao chamar a função. Saia e entre de novo no app e tente outra vez.'
@@ -47,7 +49,11 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
     }
     throw new Error(msg)
   }
-  if (!data?.ok) throw new Error(data?.message ?? 'Falha no Open Finance.')
+  if (!data?.ok) {
+    if (/a[cç][aã]o desconhecida/i.test(data?.message ?? ''))
+      throw new Error('A função "pluggy-sync" no Supabase está com o código antigo. Copie o código de novo (Open Finance → passo 4) e clique em Deploy.')
+    throw new Error(data?.message ?? 'Falha no Open Finance.')
+  }
   return data as T
 }
 
@@ -120,6 +126,7 @@ export async function fetchOpenFinanceDrafts(conns: OfConnection[], from: string
         kind,
         descriptionRaw: desc,
         accountHint: account,
+        ofCategory: t.category ?? null,
         cardLast4: isCard ? (t.installment?.cardNumber?.replace(/\D/g, '').slice(-4) || last4) : null,
         excluded: cardPayment,
         reviewFlags: [
@@ -135,4 +142,63 @@ export async function fetchOpenFinanceDrafts(conns: OfConnection[], from: string
   if (pending) warnings.push(`${pending} lançamento(s) ainda pendente(s) no banco.`)
   await supabase.auth.updateUser({ data: { pluggy_last_sync: new Date().toISOString() } }).catch(() => undefined)
   return { drafts, warnings }
+}
+
+export type OfCard = {
+  itemId: string
+  accountId: string
+  name: string
+  number: string
+  /** limite consumido (o que o banco diz que está usado) */
+  usedCents: number
+  limitCents: number | null
+  availableCents: number | null
+  minimumPaymentCents: number | null
+  /** próximo fechamento e vencimento */
+  closeDate: string | null
+  dueDate: string | null
+  /** compras do ciclo aberto (fatura do mês, ainda em aberto) */
+  openCents: number
+  cycleFrom: string
+  bills: { id: string; dueDate: string; totalCents: number; paidCents: number }[]
+}
+
+/** Cartões: limite, fatura aberta e faturas fechadas (guarda no aparelho para abrir rápido). */
+export async function ofCards(conns: OfConnection[]): Promise<{ today: string; cards: (OfCard & { bank: string })[] }> {
+  const r = await call<{ today: string; cards: OfCard[] }>({ action: 'cards', itemIds: conns.map((c) => c.itemId) })
+  const bank = new Map(conns.map((c) => [c.itemId, c.bank]))
+  const out = { today: r.today, cards: r.cards.map((c) => ({ ...c, bank: bank.get(c.itemId) ?? 'Cartão' })) }
+  try {
+    localStorage.setItem('finance:of-cards', JSON.stringify({ at: new Date().toISOString(), ...out }))
+  } catch {
+    /* sem armazenamento */
+  }
+  return out
+}
+
+export function readCardsCache(): { at: string; today: string; cards: (OfCard & { bank: string })[] } | null {
+  try {
+    const raw = localStorage.getItem('finance:of-cards')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Quebra do limite consumido:
+ *   fatura fechada ainda não paga + fatura aberta do mês + o resto (parcelas futuras, compras após o fechamento).
+ */
+export function splitCardUsage(c: OfCard, today: string) {
+  const lastBill = c.bills.find((b) => b.dueDate && b.dueDate <= addDays(today, 40)) ?? null
+  const closedUnpaid = lastBill && lastBill.dueDate >= today ? Math.max(0, lastBill.totalCents - lastBill.paidCents) : 0
+  const open = Math.max(0, c.openCents)
+  const used = c.usedCents || (c.limitCents != null && c.availableCents != null ? c.limitCents - c.availableCents : 0)
+  const future = Math.max(0, used - open - closedUnpaid)
+  return { used, open, closedUnpaid, future, lastBill }
+}
+function addDays(iso: string, n: number) {
+  const d = new Date(`${iso}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
 }

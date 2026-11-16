@@ -1,3 +1,4 @@
+import { pluggyLabel } from '@/lib/pluggyCategories'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -156,14 +157,17 @@ function enrichDrafts(
     const fromHint = resolveImportCategoryHint(d.categoryHint, categories)
     // regra aprendida → estabelecimento → o que você já usou nesse lugar → regras gerais → banco → VR
     const smart = suggestCategory(
-      { description: d.descriptionRaw, account: d.accountHint ?? null, hint: null },
+      { description: d.descriptionRaw, account: d.accountHint ?? null, hint: null, ofCategory: d.ofCategory ?? null },
       { rules: enabledRules, categories, memory: merchantMemory },
     ).categoryId
     const auto = (opts.hintFirst ? (fromHint ?? smart) : (smart ?? fromHint)) ?? d.categoryId ?? null
     return {
       ...d,
       merchantName: m.name,
-      merchantDetail: [m.kind, m.via ? `via ${m.via}` : null].filter(Boolean).join(' · ') || null,
+      merchantDetail:
+        [m.kind, m.via ? `via ${m.via}` : null, pluggyLabel(d.ofCategory) ? `Open Finance: ${pluggyLabel(d.ofCategory)}` : null]
+          .filter(Boolean)
+          .join(' · ') || null,
       merchantRuleKey: m.ruleKey,
       categoryId: auto,
       autoCategoryId: auto,

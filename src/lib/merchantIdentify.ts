@@ -125,6 +125,9 @@ const KNOWN: { re: RegExp; name: string | ((m: RegExpMatchArray) => string); kin
   { re: /KABUM/i, name: 'KaBuM!', kind: 'Compra online', categories: C.comprasOnline },
   // Viagem
   { re: /AIRBNB/i, name: 'Airbnb', kind: 'Hospedagem', categories: C.viagem },
+  { re: /\bCVC\b|DECOLAR|123\s?MILHAS|HURB|MAXMILHAS/i, name: (m) => titleCase(m[0]!), kind: 'Agência de viagem', categories: C.viagem },
+  { re: /TICKETMASTER|SYMPLA|EVENTIM|INGRESSE|INGRESSO\.?COM|TICKET\s?360|BILHETERIA|SHOTGUN/i, name: (m) => titleCase(m[0]!), kind: 'Ingresso', categories: C.lazer },
+  { re: /^ZIG\s?\*?\s?PAY|^ZIG\b/i, name: 'ZIG (bar/evento)', kind: 'Bar / evento', categories: C.bar },
   { re: /BOOKING/i, name: 'Booking', kind: 'Hospedagem', categories: C.viagem },
   { re: /LATAM|GOL\s?LINHAS|\bAZUL\b|VOEGOL/i, name: (m) => (/LATAM/i.test(m[0]) ? 'LATAM' : /AZUL/i.test(m[0]) ? 'Azul' : 'GOL'), kind: 'Passagem aérea', categories: C.viagem },
   { re: /BUSER|CLICKBUS|RODOVIARIA/i, name: 'Passagem de ônibus', kind: 'Passagem', categories: C.viagem },
@@ -189,7 +192,7 @@ const CITIES =
  * Carteiras digitais (Apple Pay, Google Pay, Samsung Pay) são só o MEIO de pagamento: o estabelecimento é o
  * resto do texto. "APPLE PAY UBER *TRIP" → "UBER *TRIP"; "Supermercado X (Apple Pay)" → "Supermercado X".
  */
-export const WALLET_RE = /[(\[]?\s*(?:via\s+|pagamento\s+(?:com|via)\s+)?(?:apple\s?pay|applepay|google\s?pay|gpay|samsung\s?pay|garmin\s?pay|wallet)\s*[)\]]?/gi
+export const WALLET_RE = /[(\[]?\s*(?:via\s+|pagamento\s+(?:com|via)\s+)?(?:apple\s?pay|applepay|google\s?pay|(?<![a-z])gpay\b|samsung\s?pay|garmin\s?pay|wallet)\s*[)\]]?/gi
 export function stripWallet(text: string): string {
   return text
     .replace(WALLET_RE, ' ')

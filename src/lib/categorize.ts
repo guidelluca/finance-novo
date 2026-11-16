@@ -1,3 +1,4 @@
+import { pluggyCategoryId } from '@/lib/pluggyCategories'
 /**
  * Categoria automática de um lançamento, do sinal mais forte para o mais fraco:
  *   1. regra aprendida com as suas correções (prioridade ≥ 150);
@@ -70,10 +71,10 @@ export async function loadMerchantMemory(userId: string): Promise<MerchantMemory
   return buildMerchantMemory(rows)
 }
 
-export type Suggestion = { categoryId: string | null; source: 'regra' | 'estabelecimento' | 'memoria' | 'regra_geral' | 'banco' | 'vr' | null }
+export type Suggestion = { categoryId: string | null; source: 'regra' | 'estabelecimento' | 'open_finance' | 'memoria' | 'regra_geral' | 'banco' | 'vr' | null }
 
 export function suggestCategory(
-  t: { description: string; account?: string | null; hint?: string | null },
+  t: { description: string; account?: string | null; hint?: string | null; ofCategory?: string | null },
   ctx: { rules: Rule[]; categories: Pick<Category, 'id' | 'name' | 'parent_id'>[]; memory?: MerchantMemory },
 ): Suggestion {
   // regras olham o texto SEM "Apple Pay"/"Google Pay"; regras que eram só a carteira não valem
@@ -86,6 +87,9 @@ export function suggestCategory(
   const m = identifyMerchant(t.description)
   const r2 = pickCategoryId(m.categories, ctx.categories)
   if (r2) return { categoryId: r2, source: 'estabelecimento' }
+  // categoria do Open Finance (Pluggy): classifica pelo estabelecimento real, melhor que o texto cru
+  const rOf = pluggyCategoryId(t.ofCategory, ctx.categories)
+  if (rOf) return { categoryId: rOf, source: 'open_finance' }
   const k = merchantKey(t.description)
   const r3 = k ? ctx.memory?.get(k) : undefined
   if (r3 && ctx.categories.some((c) => c.id === r3)) return { categoryId: r3, source: 'memoria' }

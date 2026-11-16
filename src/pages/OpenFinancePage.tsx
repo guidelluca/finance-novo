@@ -2,6 +2,7 @@ import { Check, Copy, ExternalLink, Plus, RefreshCw, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import fnCode from '../../supabase/functions/pluggy-sync/index.ts?raw'
+import { OfCardsPanel } from '@/components/finance/OfCardsPanel'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatBRLFromCents } from '@/lib/currency'
@@ -139,6 +140,7 @@ export function OpenFinancePage() {
         <p className="text-sm text-muted">Seus bancos entram sozinhos, só leitura, pelo Meu Pluggy (grátis para uso pessoal, até 5 conexões).</p>
       </header>
       {err ? <p className="rounded-2xl border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{err}</p> : null}
+      <OfCardsPanel compact />
 
       <section className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">
         <div className="flex items-center justify-between gap-2">

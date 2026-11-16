@@ -23,6 +23,8 @@ export interface TransactionDraft {
   kind: 'debit' | 'credit'
   descriptionRaw: string
   categoryId?: string | null
+  /** Categoria que a Pluggy (Open Finance) deu, em inglês, ex.: "Food delivery" */
+  ofCategory?: string | null
   /** Texto da coluna Categoria em exports / planilhas — resolvido para id na UI */
   categoryHint?: string | null
   /** Coluna Conta / banco no CSV Finance PWA — sobrescreve o rótulo por ficheiro ao gravar */

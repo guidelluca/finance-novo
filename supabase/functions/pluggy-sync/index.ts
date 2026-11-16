@@ -2,7 +2,7 @@
 // Segredos (Supabase → Edge Functions → Secrets):
 //   PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET  → do dashboard da Pluggy (nunca no app nem no GitHub)
 //   ALLOWED_USER_ID                         → o seu id de usuário do app (mostrado na tela Open Finance)
-// Ações (POST JSON): { action: 'status' | 'refresh' | 'transactions', itemIds: string[], from?: 'YYYY-MM-DD', to?: 'YYYY-MM-DD' }
+// Ações (POST JSON): { action: 'status' | 'refresh' | 'transactions' | 'cards', itemIds: string[], from?: 'YYYY-MM-DD', to?: 'YYYY-MM-DD' }
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
@@ -96,6 +96,77 @@ Deno.serve(async (req) => {
         }
       }
       return new Response(JSON.stringify({ ok: true, items: out }), { headers })
+    }
+
+    if (body.action === 'cards') {
+      // cartões: limite (total, usado, disponível), fatura aberta do ciclo atual e últimas faturas fechadas
+      const today = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10)
+      const addMonths = (iso: string, n: number) => {
+        const [y, m, d] = iso.split('-').map(Number)
+        const f = new Date(Date.UTC(y!, m! - 1 + n, 1))
+        const last = new Date(Date.UTC(f.getUTCFullYear(), f.getUTCMonth() + 1, 0)).getUTCDate()
+        return `${f.getUTCFullYear()}-${String(f.getUTCMonth() + 1).padStart(2, '0')}-${String(Math.min(d!, last)).padStart(2, '0')}`
+      }
+      const out = []
+      for (const id of itemIds) {
+        const acc = await pget(key, `/accounts?itemId=${id}`)
+        for (const a of acc.results ?? []) {
+          if (a.type !== 'CREDIT') continue
+          const cd = (a.creditData ?? {}) as Record<string, unknown>
+          // ciclo aberto: do dia seguinte ao último fechamento até o próximo fechamento
+          let nextClose = typeof cd.balanceCloseDate === 'string' ? (cd.balanceCloseDate as string).slice(0, 10) : null
+          if (nextClose) while (nextClose < today) nextClose = addMonths(nextClose, 1)
+          const cycleFrom = nextClose ? addMonths(nextClose, -1) : addMonths(today, -1)
+          const txs: Record<string, unknown>[] = []
+          for (let page = 1; page <= 10; page++) {
+            const t = await pget(key, `/transactions?accountId=${a.id}&from=${cycleFrom}&to=${today}&pageSize=500&page=${page}`)
+            txs.push(...(t.results ?? []))
+            if (page >= (t.totalPages ?? 1)) break
+          }
+          let openCents = 0
+          for (const t of txs) {
+            const d = String(t.date ?? '').slice(0, 10)
+            if (d <= cycleFrom) continue
+            const desc = String(t.description ?? '')
+            const cents = Math.round(Math.abs(Number(t.amountInAccountCurrency ?? t.amount ?? 0)) * 100)
+            if (t.type === 'CREDIT' && /pagamento|pgto|pagto/i.test(desc)) continue // pagamento da fatura anterior
+            openCents += t.type === 'CREDIT' ? -cents : cents
+          }
+          let bills: Record<string, unknown>[] = []
+          try {
+            const b = await pget(key, `/bills?accountId=${a.id}&pageSize=6`)
+            bills = (b.results ?? []) as Record<string, unknown>[]
+          } catch {
+            bills = []
+          }
+          out.push({
+            itemId: id,
+            accountId: a.id,
+            name: a.marketingName ?? a.name,
+            number: a.number,
+            usedCents: Math.round(Number(a.balance ?? 0) * 100),
+            limitCents: cd.creditLimit != null ? Math.round(Number(cd.creditLimit) * 100) : null,
+            availableCents: cd.availableCreditLimit != null ? Math.round(Number(cd.availableCreditLimit) * 100) : null,
+            minimumPaymentCents: cd.minimumPayment != null ? Math.round(Number(cd.minimumPayment) * 100) : null,
+            closeDate: nextClose,
+            dueDate: typeof cd.balanceDueDate === 'string' ? (cd.balanceDueDate as string).slice(0, 10) : null,
+            openCents,
+            cycleFrom,
+            bills: bills
+              .map((b) => ({
+                id: b.id,
+                dueDate: String(b.dueDate ?? '').slice(0, 10),
+                totalCents: Math.round(Number(b.totalAmount ?? 0) * 100),
+                paidCents: Math.round(
+                  ((b.payments as { amount?: number }[] | undefined) ?? []).reduce((s, p) => s + Number(p.amount ?? 0), 0) * 100,
+                ),
+              }))
+              .sort((x, y) => (x.dueDate < y.dueDate ? 1 : -1))
+              .slice(0, 3),
+          })
+        }
+      }
+      return new Response(JSON.stringify({ ok: true, today, cards: out }), { headers })
     }
 
     if (body.action === 'transactions') {
