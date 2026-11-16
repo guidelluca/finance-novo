@@ -1,0 +1,352 @@
+[01-inicio] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[01-inicio] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[01-inicio] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[01-inicio] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[01-inicio] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[01-inicio] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[01-inicio] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[01-inicio] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[01-inicio] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[01-inicio] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[02-inicio-escuro] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[02-inicio-escuro] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[02-inicio-escuro] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[02-inicio-escuro] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[02-inicio-escuro] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[02-inicio-escuro] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[02-inicio-escuro] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[02-inicio-escuro] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[02-inicio-escuro] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[02-inicio-escuro] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[03-extrato] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[04-extrato-editar] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[05-adicionar] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[06-orcamento] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[07-metas] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[08-mes] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[09-fechamento] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[10-visao-geral] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[10-visao-geral] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[10-visao-geral] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[10-visao-geral] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[11-menu] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[11-menu] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[11-menu] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[11-menu] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[11-menu] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[11-menu] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[11-menu] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[11-menu] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[11-menu] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[11-menu] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[13-extrato-escuro] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[14-inicio-desktop] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[14-inicio-desktop] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[14-inicio-desktop] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[14-inicio-desktop] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[14-inicio-desktop] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[14-inicio-desktop] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[14-inicio-desktop] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[14-inicio-desktop] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[14-inicio-desktop] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[14-inicio-desktop] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[15-cartoes] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[16-categorias] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[17-casa] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[17-casa] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[18-extrato-casa] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[19-credito] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[19-credito] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[19-credito] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[20-credito-escuro] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[20-credito-escuro] warning: The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+[20-credito-escuro] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[21-panorama] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[22-cartoes-of] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
+[23-cartoes-of-escuro] error: TypeError: Cannot read properties of undefined (reading 'normalize')
+    at n (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52739)
+    at http://localhost:4173/assets/index-D3dSxGVZ.js:25:52831
+    at Array.find (<anonymous>)
+    at Xg (http://localhost:4173/assets/index-D3dSxGVZ.js:25:52823)
+    at i_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:54539)
+    at u_ (http://localhost:4173/assets/index-D3dSxGVZ.js:25:58796)
+    at async http://localhost:4173/assets/index-D3dSxGVZ.js:25:60584
