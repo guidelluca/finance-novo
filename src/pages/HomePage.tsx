@@ -6,6 +6,8 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { HomeDashboard } from '@/components/finance/HomeDashboard'
 import { OfAlerts } from '@/components/finance/OfAlerts'
+import { AdvicePanel } from '@/components/finance/AdvicePanel'
+import type { AdviceInput } from '@/lib/spendingAdvice'
 import { useCoverage } from '@/hooks/useCoverage'
 import { readHouse } from '@/lib/house'
 import { useMonthData } from '@/hooks/useMonthData'
@@ -130,6 +132,29 @@ export function HomePage() {
     result.issues.find((i) => i.severity !== 'baixa' && i.type !== 'sem_categoria') ??
     result.issues.find((i) => i.type !== 'sem_categoria') ??
     null
+
+  // conselhos: categorias do mês contra a média dos 3 meses anteriores (pelo extrato)
+  const adviceInput = useMemo<AdviceInput | null>(() => {
+    if (!result.totals.incomeCents && !result.totals.expenseCents) return null
+    const prev = [1, 2, 3].map((k) => shiftMonth(month, -k))
+    const avg = new Map<string, number>()
+    for (const t of history) {
+      if (t.kind !== 'debit' || !t.categoryName || !prev.includes(periods.periodOf(t.date))) continue
+      avg.set(t.categoryName, (avg.get(t.categoryName) ?? 0) + t.amountCents / 3)
+    }
+    const manual = Number(user?.user_metadata?.net_income_cents ?? 0) || 0
+    return {
+      month: format(parseISO(`${month}-01`), "LLLL 'de' yyyy", { locale: ptBR }),
+      incomeCents: manual || result.totals.incomeCents,
+      spentCents: result.totals.expenseCents,
+      daysLeft: Math.max(0, daysInMonth - refDay),
+      categories: result.byCategory
+        .filter((g) => g.categoryId)
+        .slice(0, 10)
+        .map((g) => ({ name: g.name, cents: g.totalCents, avgCents: Math.round(avg.get(g.name) ?? 0) })),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, history, month, periods, daysInMonth, refDay, user])
 
   const recent = [...result.included].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 4)
   // o número do mês conta até o valor quando a tela abre ou o mês muda
@@ -331,6 +356,8 @@ export function HomePage() {
           </div>
         </section>
       ) : null}
+
+      {!loading && isCurrent ? <AdvicePanel input={adviceInput} cacheKey={`geral:${month}`} title="Conselhos do mês" /> : null}
 
       {/* Painel com gráficos */}
       {!loading ? (

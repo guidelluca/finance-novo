@@ -468,11 +468,40 @@ export function consolidateMonth(
   //    - compras de ~45 a 3 dias antes do pagamento (o ciclo da fatura);
   //    - importou tudo (≥ 95%): o pagamento não conta; nada: conta inteiro;
   //      parte: conta só a diferença ("parte sem detalhe") e avisa quanto falta importar.
+  //    Pix/TED que pagou fatura sem dizer "fatura" (ex.: "Pix enviado | PICPAY INSTITUICAO"): se o cartão
+  //    registra um "pagamento recebido" do mesmo valor em até 3 dias, é pagamento daquele cartão, não gasto.
+  const payIssuer = new Map<string, Issuer>()
+  {
+    const cardCredits = [...items, ...hist].filter((c) => isCard(c) && c.kind === 'credit' && /pagamento|pgto|pagto|fatura/i.test(c.description))
+    const usedCredit = new Set<string>()
+    const near = (a: string, b: string) => Math.abs(dayDiff(a, b)) <= 3
+    for (const t of items) {
+      if (t.kind !== 'debit' || isCard(t) || !CARD_PAYMENT.test(t.description)) continue
+      const m = cardCredits.find((c) => !usedCredit.has(c.id) && c.amountCents === t.amountCents && near(c.date, t.date))
+      if (m) usedCredit.add(m.id)
+    }
+    for (const t of items) {
+      if (t.kind !== 'debit' || isCard(t) || CARD_PAYMENT.test(t.description)) continue
+      const ex = excluded.get(t.id)
+      if (ex && ex.reason !== 'transferencia_interna') continue
+      const m = cardCredits.find((c) => !usedCredit.has(c.id) && c.amountCents === t.amountCents && near(c.date, t.date))
+      const iss = m ? issuerOf(m.account ?? '') : null
+      if (!m || !iss) continue
+      usedCredit.add(m.id)
+      excluded.delete(t.id)
+      payIssuer.set(t.id, iss)
+    }
+  }
+  // o "pagamento recebido" do lado do cartão não é estorno nem renda: é o mesmo dinheiro do pagamento da conta
+  for (const t of items) {
+    if (isCard(t) && t.kind === 'credit' && !excluded.has(t.id) && /pagamento (recebido|de fatura|da fatura|efetuado)|pgto|pagto|fatura paga|pagamento on ?line/i.test(t.description))
+      exclude(t, 'pagamento_fatura', 'Pagamento da fatura registrado no cartão (o dinheiro saiu da conta)')
+  }
   const faturaChecks: FaturaCheck[] = []
   for (const t of items) {
     if (t.kind !== 'debit' || isCard(t) || excluded.has(t.id)) continue
-    if (!CARD_PAYMENT.test(t.description)) continue
-    const issuer = issuerOf(t.description)
+    if (!CARD_PAYMENT.test(t.description) && !payIssuer.has(t.id)) continue
+    const issuer = payIssuer.get(t.id) ?? issuerOf(t.description)
     const from = shiftIso(t.date, -45)
     const to = shiftIso(t.date, -3)
     const cardTxs = [...items, ...hist].filter(

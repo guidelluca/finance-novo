@@ -1,6 +1,6 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { ChevronDown, ChevronLeft, ChevronRight, CreditCard, Layers, ReceiptText, Store, TrendingDown, TrendingUp } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, CreditCard, HeartPulse, Layers, ReceiptText, Store, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { FutureInstallments } from '@/components/finance/FutureInstallments'
@@ -10,6 +10,11 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useChartTheme } from '@/hooks/useChartTheme'
 import { useCountUp } from '@/hooks/useCountUp'
 import { usePeriods } from '@/hooks/usePeriods'
+import { AdvicePanel } from '@/components/finance/AdvicePanel'
+import { cardLedger, creditHealth, incomeOf } from '@/lib/creditHealth'
+import { detectSubscriptions, projectInstallments } from '@/lib/ofInsights'
+import { readCardsCache } from '@/lib/openFinance'
+import type { AdviceInput } from '@/lib/spendingAdvice'
 import { analyzeMonth, cardName, creditMovements, cumulative, installmentOf, sumSigned, type Cat, type CreditRow } from '@/lib/creditAnalysis'
 import { formatBRLFromCents } from '@/lib/currency'
 import { shiftMonth } from '@/lib/monthConsolidation'
@@ -46,6 +51,7 @@ export function CreditPage() {
   const cur = month ?? periods.current
   const [card, setCard] = useState<string | null>(null)
   const [rows, setRows] = useState<CreditRow[]>([])
+  const [allRows, setAllRows] = useState<CreditRow[]>([])
   const [cats, setCats] = useState<Cat[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
@@ -86,6 +92,7 @@ export function CreditPage() {
       const { data: cc } = await supabase.from('categories').select('id, name, parent_id').eq('user_id', user.id)
       if (!alive) return
       setRows(creditMovements(out))
+      setAllRows(out)
       setCats((cc ?? []) as Cat[])
       setLoading(false)
     })()
@@ -104,6 +111,59 @@ export function CreditPage() {
   const monthRows = useMemo(() => inMonth(cur), [scoped, cur, periods]) // eslint-disable-line react-hooks/exhaustive-deps
   const prevRows = useMemo(() => inMonth(shiftMonth(cur, -1)), [scoped, cur, periods]) // eslint-disable-line react-hooks/exhaustive-deps
   const a = useMemo(() => analyzeMonth(monthRows, cats), [monthRows, cats])
+
+  // ---- saúde do cartão (todos os cartões, contra a renda do mês)
+  const monthAll = useMemo(() => allRows.filter((t) => periods.periodOf(t.date) === cur), [allRows, cur, periods])
+  const allCreditMonth = useMemo(() => rows.filter((t) => periods.periodOf(t.date) === cur), [rows, cur, periods])
+  const manualIncome = Number(user?.user_metadata?.net_income_cents ?? 0) || 0
+  const extratoIncome = incomeOf(monthAll)
+  const incomeCents = manualIncome || extratoIncome
+  const [editIncome, setEditIncome] = useState(false)
+  const [incomeInput, setIncomeInput] = useState('')
+  const saveIncome = async () => {
+    const v = Math.round(Number(incomeInput.replace(/\./g, '').replace(',', '.')) * 100)
+    await supabase.auth.updateUser({ data: { net_income_cents: Number.isFinite(v) && v > 0 ? v : null } })
+    setEditIncome(false)
+  }
+  const nextYm = (() => {
+    const [y, m] = periods.today.split('-').map(Number)
+    const d = new Date(Date.UTC(y!, m!, 1))
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+  })()
+  const nextInst = useMemo(() => projectInstallments(rows, periods.today).find((m) => m.ym === nextYm)?.cents ?? 0, [rows, periods.today, nextYm])
+  const ofCards = useMemo(() => readCardsCache(), [tick]) // eslint-disable-line react-hooks/exhaustive-deps
+  const daysLeftHealth = Math.max(0, Math.round((Date.parse(`${periods.rangeOf(cur).end}T12:00:00Z`) - Date.parse(`${periods.today}T12:00:00Z`)) / 86_400_000) + 1)
+  const health = creditHealth({
+    spentCents: sumSigned(allCreditMonth),
+    incomeCents,
+    incomeSource: manualIncome ? 'manual' : extratoIncome ? 'extrato' : null,
+    daysLeft: cur === periods.current ? daysLeftHealth : 0,
+    nextMonthInstallmentsCents: nextInst,
+    ofCards,
+  })
+  const ledger = useMemo(
+    () => cardLedger({ monthCredit: allCreditMonth, monthAll, allCredit: rows, today: periods.today, ofCards }),
+    [allCreditMonth, monthAll, rows, periods.today, ofCards],
+  )
+  const adviceInput = useMemo<AdviceInput | null>(() => {
+    if (!rows.length) return null
+    const all = analyzeMonth(allCreditMonth, cats)
+    const prevMonths = [1, 2, 3].map((k) => shiftMonth(cur, -k))
+    const avgBy = new Map<string, number>()
+    for (const pm of prevMonths) {
+      const am = analyzeMonth(rows.filter((t) => periods.periodOf(t.date) === pm), cats)
+      for (const c of am.byCategory) avgBy.set(c.name, (avgBy.get(c.name) ?? 0) + c.cents / 3)
+    }
+    return {
+      month: monthLabel(cur, "LLLL 'de' yyyy"),
+      incomeCents,
+      spentCents: sumSigned(allCreditMonth),
+      daysLeft: cur === periods.current ? daysLeftHealth : 0,
+      categories: all.byCategory.slice(0, 10).map((c) => ({ name: c.name, cents: c.cents, avgCents: Math.round(avgBy.get(c.name) ?? 0) })),
+      credit: { spentCents: health.spentCents, pct: health.pct, safeCents: health.safeCents, nextMonthInstallmentsCents: nextInst, limitUsePct: health.limitUsePct },
+      subscriptions: detectSubscriptions(allRows, periods.today).map((x) => ({ name: x.name, cents: x.monthlyCents, increasePct: x.increasePct })),
+    }
+  }, [rows, allRows, allCreditMonth, cats, cur, periods, incomeCents, health.spentCents, health.pct, health.safeCents, health.limitUsePct, nextInst, daysLeftHealth])
 
   const range = periods.rangeOf(cur)
   const prevRange = periods.rangeOf(shiftMonth(cur, -1))
@@ -229,6 +289,145 @@ export function CreditPage() {
         ) : null}
         {a.refundsCents ? <p className="text-[11px] text-[#b9bdb4]">Já descontados {BR(a.refundsCents)} de estornos.</p> : null}
       </section>
+
+
+      {!loading && rows.length ? (
+        <>
+          <Panel icon={HeartPulse} title="Saúde do cartão" right={<span className="text-xs text-muted">todos os cartões</span>}>
+            {health.status === 'sem_renda' ? (
+              <p className="text-sm text-muted">Não achei salário neste mês. Informe sua renda líquida para ver quanto do cartão cabe nela.</p>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <div className="relative h-3 overflow-hidden rounded-full bg-border/60" role="img" aria-label={`Crédito em ${Math.round((health.pct ?? 0) * 100)}% da renda`}>
+                    <span
+                      className={cn('absolute inset-y-0 left-0 rounded-full', health.status === 'saudavel' ? 'bg-[var(--series-3)]' : health.status === 'atencao' ? 'bg-[var(--series-4)]' : 'bg-danger')}
+                      style={{ width: `${Math.min(100, ((health.pct ?? 0) / 0.6) * 100)}%` }}
+                    />
+                    <span className="absolute inset-y-0 w-0.5 bg-foreground/70" style={{ left: `${(0.3 / 0.6) * 100}%` }} aria-hidden />
+                  </div>
+                  <div className="flex justify-between text-[11px] text-muted">
+                    <span>0%</span>
+                    <span>teto saudável 30%</span>
+                    <span>60%</span>
+                  </div>
+                </div>
+                <p className="text-sm">
+                  <b className="tabular-nums">{Math.round((health.pct ?? 0) * 100)}% da renda</b> foi para o crédito ({BR(health.spentCents)} de {BR(health.incomeCents)}).{' '}
+                  {health.overCents > 0 ? (
+                    <span className="font-semibold text-danger">Passou {BR(health.overCents)} do teto de 30% ({BR(health.safeCents ?? 0)}).</span>
+                  ) : (
+                    <span className="text-[#3f5a12] dark:text-[#c8f169]">
+                      Ainda cabem {BR(health.roomCents ?? 0)}
+                      {health.roomPerDayCents ? ` (${BR(health.roomPerDayCents)}/dia)` : ''} até o fim do mês.
+                    </span>
+                  )}
+                </p>
+                <dl className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-2xl bg-background p-2.5">
+                    <dt className="text-muted">Parcelas no próximo mês</dt>
+                    <dd className="mt-0.5 font-semibold tabular-nums">
+                      {BR(health.nextMonthInstallmentsCents)}
+                      {health.nextMonthPct != null ? <span className="font-normal text-muted"> · {Math.round(health.nextMonthPct * 100)}% da renda</span> : null}
+                    </dd>
+                  </div>
+                  <div className="rounded-2xl bg-background p-2.5">
+                    <dt className="text-muted">Limite usado (com parcelas)</dt>
+                    <dd className={cn('mt-0.5 font-semibold tabular-nums', (health.limitUsePct ?? 0) > 0.3 && 'text-danger')}>
+                      {health.limitUsePct != null ? `${Math.round(health.limitUsePct * 100)}%` : '—'}
+                      <span className="font-normal text-muted"> · ideal até 30%</span>
+                    </dd>
+                  </div>
+                </dl>
+              </>
+            )}
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+              <span>
+                Renda do mês: {incomeCents ? BR(incomeCents) : '—'} {health.incomeSource === 'manual' ? '(você definiu)' : health.incomeSource === 'extrato' ? '(salários no extrato)' : ''}
+              </span>
+              {editIncome ? (
+                <form
+                  className="flex items-center gap-1.5"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    void saveIncome()
+                  }}
+                >
+                  <input
+                    inputMode="decimal"
+                    value={incomeInput}
+                    onChange={(e) => setIncomeInput(e.target.value)}
+                    placeholder="Ex.: 5.300,00 (vazio = do extrato)"
+                    className="h-8 w-44 rounded-lg border border-border bg-background px-2 text-xs text-foreground"
+                  />
+                  <button type="submit" className="font-semibold underline">
+                    Salvar
+                  </button>
+                </form>
+              ) : (
+                <button type="button" className="font-semibold underline" onClick={() => setEditIncome(true)}>
+                  Ajustar
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-muted">
+              Referências: faturas e dívidas até 30% da renda líquida; limite usado até 30%; nunca pagar só o mínimo (o rotativo passa de 400% ao ano).
+            </p>
+          </Panel>
+
+          {ledger.length ? (
+            <Panel icon={Wallet} title="Faturas: todos os cartões">
+              <div className="-mx-1 overflow-x-auto">
+                <table className="w-full min-w-[460px] text-xs">
+                  <thead>
+                    <tr className="text-left text-muted">
+                      <th className="px-1 py-1 font-medium">Cartão</th>
+                      <th className="px-1 py-1 text-right font-medium">Comprou</th>
+                      <th className="px-1 py-1 text-right font-medium">Parcelas</th>
+                      <th className="px-1 py-1 text-right font-medium">Pagou</th>
+                      <th className="px-1 py-1 text-right font-medium">A pagar</th>
+                      <th className="px-1 py-1 text-right font-medium">Parc. futuras</th>
+                    </tr>
+                  </thead>
+                  <tbody className="tabular-nums">
+                    {ledger.map((l) => (
+                      <tr key={l.card} className="border-t border-border">
+                        <td className="px-1 py-1.5 font-medium">
+                          <span className="inline-flex items-center gap-1.5">
+                            <i className="size-2 rounded-full" style={{ background: colorOf(l.card) }} />
+                            {l.card}
+                          </span>
+                        </td>
+                        <td className="px-1 py-1.5 text-right">{BR0(l.boughtCents)}</td>
+                        <td className="px-1 py-1.5 text-right text-muted">{BR0(l.installmentsCents)}</td>
+                        <td className="px-1 py-1.5 text-right">{l.paidCents ? BR0(l.paidCents) : '—'}</td>
+                        <td className="px-1 py-1.5 text-right">{l.toPayCents != null ? BR0(l.toPayCents) : '—'}</td>
+                        <td className="px-1 py-1.5 text-right text-muted">{l.futureCents ? BR0(l.futureCents) : '—'}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-border font-semibold">
+                      <td className="px-1 py-1.5">Total</td>
+                      <td className="px-1 py-1.5 text-right">{BR0(ledger.reduce((s, l) => s + l.boughtCents, 0))}</td>
+                      <td className="px-1 py-1.5 text-right">{BR0(ledger.reduce((s, l) => s + l.installmentsCents, 0))}</td>
+                      <td className="px-1 py-1.5 text-right">{BR0(ledger.reduce((s, l) => s + l.paidCents, 0))}</td>
+                      <td className="px-1 py-1.5 text-right">
+                        {ledger.some((l) => l.toPayCents != null) ? BR0(ledger.reduce((s, l) => s + (l.toPayCents ?? 0), 0)) : '—'}
+                      </td>
+                      <td className="px-1 py-1.5 text-right">{BR0(ledger.reduce((s, l) => s + l.futureCents, 0))}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-muted">
+                Comprou = compras do mês pela data (parcelas incluídas). Pagou = faturas pagas no mês, inclusive por Pix. A pagar = fatura fechada + aberta
+                informadas pelo banco (Open Finance). O pagamento de fatura não entra como gasto: as compras já contam uma a uma.
+              </p>
+            </Panel>
+          ) : null}
+
+          <AdvicePanel input={adviceInput} cacheKey={`credito:${cur}`} title="Conselhos para o seu crédito" />
+        </>
+      ) : null}
 
       {loading ? <ListSkeleton rows={4} /> : null}
 
