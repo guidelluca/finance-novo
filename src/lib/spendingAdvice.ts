@@ -3,6 +3,8 @@ import { financeLlmGenerateJson, isFinanceLlmConfigured } from '@/lib/financeLlm
 const BR = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 
 export type AdviceInput = {
+  /** 'credito': só o cartão (não calcula o quanto pode gastar no mês inteiro) */
+  scope?: 'geral' | 'credito'
   month: string
   incomeCents: number
   spentCents: number
@@ -20,7 +22,7 @@ export type Advice = { kind: 'pode' | 'evitar' | 'dica'; title: string; detail: 
 export function ruleAdvice(a: AdviceInput): Advice[] {
   const out: Advice[] = []
   const free = a.incomeCents - a.spentCents
-  if (a.incomeCents && a.daysLeft > 0) {
+  if (a.scope !== 'credito' && a.incomeCents && a.daysLeft > 0) {
     const reserve = Math.round(a.incomeCents * 0.2) // 20% para guardar/investir
     const room = Math.max(0, free - reserve)
     out.push(
@@ -74,7 +76,7 @@ export const aiReady = () => isFinanceLlmConfigured()
 export async function askAiAdvice(key: string, a: AdviceInput): Promise<AiAdvice> {
   const r = (c: number) => Math.round(c / 100)
   const prompt = `Você é um planejador financeiro pessoal brasileiro, direto e prático. Dê conselhos para o mês ${a.month}.
-Renda líquida do mês: R$ ${r(a.incomeCents)}. Gasto até agora: R$ ${r(a.spentCents)}. Dias até o fim do mês: ${a.daysLeft}.
+Renda líquida do mês: R$ ${r(a.incomeCents)}. ${a.scope === 'credito' ? 'Gasto no cartão até agora' : 'Gasto total até agora'}: R$ ${r(a.spentCents)}. Dias até o fim do mês: ${a.daysLeft}.
 Gastos por categoria este mês (R$ agora / média dos 3 meses anteriores):
 ${a.categories.map((c) => `- ${c.name}: ${r(c.cents)} / ${r(c.avgCents)}`).join('\n') || '- sem dados'}
 ${a.credit ? `Cartão de crédito: R$ ${r(a.credit.spentCents)} no mês${a.credit.pct != null ? ` (${Math.round(a.credit.pct * 100)}% da renda; referência saudável: até 30%)` : ''}; parcelas já comprometidas no próximo mês: R$ ${r(a.credit.nextMonthInstallmentsCents)}${a.credit.limitUsePct != null ? `; limite usado ${Math.round(a.credit.limitUsePct * 100)}%` : ''}.` : ''}

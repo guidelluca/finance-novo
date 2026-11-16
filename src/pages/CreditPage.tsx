@@ -155,6 +155,7 @@ export function CreditPage() {
       for (const c of am.byCategory) avgBy.set(c.name, (avgBy.get(c.name) ?? 0) + c.cents / 3)
     }
     return {
+      scope: 'credito',
       month: monthLabel(cur, "LLLL 'de' yyyy"),
       incomeCents,
       spentCents: sumSigned(allCreditMonth),
@@ -377,47 +378,43 @@ export function CreditPage() {
 
           {ledger.length ? (
             <Panel icon={Wallet} title="Faturas: todos os cartões">
-              <div className="-mx-1 overflow-x-auto">
-                <table className="w-full min-w-[460px] text-xs">
-                  <thead>
-                    <tr className="text-left text-muted">
-                      <th className="px-1 py-1 font-medium">Cartão</th>
-                      <th className="px-1 py-1 text-right font-medium">Comprou</th>
-                      <th className="px-1 py-1 text-right font-medium">Parcelas</th>
-                      <th className="px-1 py-1 text-right font-medium">Pagou</th>
-                      <th className="px-1 py-1 text-right font-medium">A pagar</th>
-                      <th className="px-1 py-1 text-right font-medium">Parc. futuras</th>
-                    </tr>
-                  </thead>
-                  <tbody className="tabular-nums">
-                    {ledger.map((l) => (
-                      <tr key={l.card} className="border-t border-border">
-                        <td className="px-1 py-1.5 font-medium">
-                          <span className="inline-flex items-center gap-1.5">
-                            <i className="size-2 rounded-full" style={{ background: colorOf(l.card) }} />
-                            {l.card}
-                          </span>
-                        </td>
-                        <td className="px-1 py-1.5 text-right">{BR0(l.boughtCents)}</td>
-                        <td className="px-1 py-1.5 text-right text-muted">{BR0(l.installmentsCents)}</td>
-                        <td className="px-1 py-1.5 text-right">{l.paidCents ? BR0(l.paidCents) : '—'}</td>
-                        <td className="px-1 py-1.5 text-right">{l.toPayCents != null ? BR0(l.toPayCents) : '—'}</td>
-                        <td className="px-1 py-1.5 text-right text-muted">{l.futureCents ? BR0(l.futureCents) : '—'}</td>
-                      </tr>
-                    ))}
-                    <tr className="border-t-2 border-border font-semibold">
-                      <td className="px-1 py-1.5">Total</td>
-                      <td className="px-1 py-1.5 text-right">{BR0(ledger.reduce((s, l) => s + l.boughtCents, 0))}</td>
-                      <td className="px-1 py-1.5 text-right">{BR0(ledger.reduce((s, l) => s + l.installmentsCents, 0))}</td>
-                      <td className="px-1 py-1.5 text-right">{BR0(ledger.reduce((s, l) => s + l.paidCents, 0))}</td>
-                      <td className="px-1 py-1.5 text-right">
-                        {ledger.some((l) => l.toPayCents != null) ? BR0(ledger.reduce((s, l) => s + (l.toPayCents ?? 0), 0)) : '—'}
-                      </td>
-                      <td className="px-1 py-1.5 text-right">{BR0(ledger.reduce((s, l) => s + l.futureCents, 0))}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+              <ul className="space-y-2">
+                {[...ledger.map((l) => ({ ...l, total: false })), {
+                  card: 'Todos os cartões',
+                  boughtCents: ledger.reduce((s, l) => s + l.boughtCents, 0),
+                  installmentsCents: ledger.reduce((s, l) => s + l.installmentsCents, 0),
+                  paidCents: ledger.reduce((s, l) => s + l.paidCents, 0),
+                  toPayCents: ledger.some((l) => l.toPayCents != null) ? ledger.reduce((s, l) => s + (l.toPayCents ?? 0), 0) : null,
+                  futureCents: ledger.reduce((s, l) => s + l.futureCents, 0),
+                  total: true,
+                }].map((l) => (
+                  <li key={l.card} className={cn('rounded-2xl p-3', l.total ? 'bg-ink text-[#f2f3ee]' : 'bg-background')}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold">
+                        {!l.total ? <i className="size-2 rounded-full" style={{ background: colorOf(l.card) }} /> : null}
+                        {l.card}
+                      </span>
+                      <span className="text-right">
+                        <span className={cn('block text-[11px]', l.total ? 'text-[#b9bdb4]' : 'text-muted')}>comprou no mês</span>
+                        <span className="text-base font-semibold tabular-nums">{BR(l.boughtCents)}</span>
+                      </span>
+                    </div>
+                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                      {([
+                        ['Parcelas do mês', l.installmentsCents],
+                        ['Pagou de fatura', l.paidCents || null],
+                        ['A pagar (banco)', l.toPayCents],
+                        ['Parcelas futuras', l.futureCents || null],
+                      ] as [string, number | null][]).map(([k, v]) => (
+                        <div key={k} className="flex justify-between gap-2">
+                          <dt className={l.total ? 'text-[#b9bdb4]' : 'text-muted'}>{k}</dt>
+                          <dd className="tabular-nums">{v != null ? BR0(v) : '—'}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </li>
+                ))}
+              </ul>
               <p className="text-[11px] text-muted">
                 Comprou = compras do mês pela data (parcelas incluídas). Pagou = faturas pagas no mês, inclusive por Pix. A pagar = fatura fechada + aberta
                 informadas pelo banco (Open Finance). O pagamento de fatura não entra como gasto: as compras já contam uma a uma.
