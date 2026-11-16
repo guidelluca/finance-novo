@@ -770,6 +770,12 @@ export function ImportPage() {
         return
       }
       setProgress('Conferindo repetidos…')
+      const [{ data: rr }, { data: cc }] = await Promise.all([
+        supabase.from('rules').select('*').eq('user_id', user.id),
+        supabase.from('categories').select('*').eq('user_id', user.id),
+      ])
+      const ruleRows = (rr ?? []) as Rule[]
+      const categoryRows = (cc ?? []) as Category[]
       const flagged = await flagPossibleDuplicates(user.id, r.drafts)
       setLastParserId('open_finance_pluggy_v1')
       setDetectedBank('Open Finance')
