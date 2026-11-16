@@ -200,7 +200,7 @@ export function CreditPage() {
           {[
             ['Compras', String(a.purchases)],
             ['Ticket médio', BR0(a.avgTicketCents)],
-            ['Média 5 meses', avg6 ? BR0(avg6) : '—'],
+            ['Média mensal', avg6 ? BR0(avg6) : '—'],
           ].map(([k, v]) => (
             <div key={k} className="rounded-2xl bg-white/5 p-2.5">
               <dt className="text-[#b9bdb4]">{k}</dt>
