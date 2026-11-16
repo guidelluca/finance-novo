@@ -74,23 +74,41 @@ const session = {
   expires_at: Math.floor(Date.now() / 1000) + 3600 * 24 * 365, user,
 }
 
-async function shoot(browser, { name, path, theme = 'light', width = 390, height = 844, before }) {
+// Open Finance de mentira (só para os prints da seção de cartões)
+const OF_CARDS = {
+  at: '2026-11-08T14:00:00.000Z',
+  today: '2026-11-08',
+  cards: [
+    { itemId: 'i1', accountId: 'a1', name: 'Itaú Visa Platinum', number: '4417', usedCents: 412000, limitCents: 900000, availableCents: 488000, minimumPaymentCents: 39500, closeDate: '2026-11-21', dueDate: '2026-11-28', openCents: 98000, cycleFrom: '2026-10-21', bills: [{ id: 'b1', dueDate: '2026-10-28', totalCents: 263892, paidCents: 263892 }], bank: 'Itaú' },
+    { itemId: 'i2', accountId: 'a2', name: 'PicPay Mastercard Gold', number: '8812', usedCents: 618000, limitCents: 700000, availableCents: 82000, minimumPaymentCents: 61000, closeDate: '2026-11-09', dueDate: '2026-11-16', openCents: 121000, cycleFrom: '2026-10-09', bills: [{ id: 'b2', dueDate: '2026-11-16', totalCents: 158966, paidCents: 0 }], bank: 'PicPay' },
+    { itemId: 'i3', accountId: 'a3', name: 'Inter Black', number: '0031', usedCents: 34000, limitCents: 300000, availableCents: 266000, minimumPaymentCents: null, closeDate: '2026-11-25', dueDate: '2026-12-02', openCents: 34000, cycleFrom: '2026-10-25', bills: [], bank: 'Inter' },
+  ],
+}
+
+async function shoot(browser, { name, path, theme = 'light', width = 390, height = 844, before, of = false }) {
+  const baseMeta = user.user_metadata
+  if (of) user.user_metadata = { ...baseMeta, pluggy_items: [{ itemId: 'i1', bank: 'Itaú' }, { itemId: 'i2', bank: 'PicPay' }, { itemId: 'i3', bank: 'Inter' }] }
   const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' })
   const page = await ctx.newPage()
   await page.clock.setFixedTime(new Date('2026-11-08T15:00:00-03:00'))
   page.on('console', (m) => (m.type() === 'error' || m.type() === 'warning') && log.push(`[${name}] ${m.type()}: ${m.text()}`))
   page.on('pageerror', (e) => log.push(`[${name}] PAGEERROR: ${e.message}`))
   await mock(page)
-  await page.addInitScript(([s, t]) => {
+  await page.addInitScript(([s, t, ofc]) => {
+    if (ofc) {
+      localStorage.setItem('finance:of-cards', JSON.stringify(ofc))
+      localStorage.setItem('finance:of-auto', JSON.stringify({ at: new Date().toISOString(), fresh: 0, from: '', to: '', tagged: 0, error: null }))
+    }
     if (s) localStorage.setItem('sb-mock-auth-token', JSON.stringify(s))
     localStorage.setItem('finance-pwa:theme', t)
     localStorage.setItem('finance:passkey-prompt-dismissed', '1')
-  }, [path === '/login' ? null : session, theme])
+  }, [path === '/login' ? null : { ...session, user }, theme, of ? OF_CARDS : null])
   await page.goto(BASE + path, { waitUntil: 'networkidle' })
   await page.waitForTimeout(1200)
   if (before) await before(page)
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true })
   await ctx.close()
+  user.user_metadata = baseMeta
 }
 
 const browser = await chromium.launch()
@@ -116,6 +134,8 @@ const screens = [
   { name: '19-credito', path: '/credito', height: 2400 },
   { name: '20-credito-escuro', path: '/credito', theme: 'dark', height: 2400 },
   { name: '21-panorama', path: '/panorama' },
+  { name: '22-cartoes-of', path: '/cards', of: true, height: 1600 },
+  { name: '23-cartoes-of-escuro', path: '/cards', of: true, theme: 'dark', height: 1600 },
 ]
 for (const s of screens) {
   try {

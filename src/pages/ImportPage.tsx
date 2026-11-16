@@ -1,5 +1,5 @@
 import { pluggyLabel } from '@/lib/pluggyCategories'
-import { clearPending } from '@/lib/ofAutoSync'
+import { autoSync, clearPending } from '@/lib/ofAutoSync'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -1107,6 +1107,8 @@ export function ImportPage() {
       // Open Finance: "desde a última busca" passa a contar a partir daqui (só depois de salvar)
       if (lastParserId === 'open_finance_pluggy_v1')
         await supabase.auth.updateUser({ data: { pluggy_last_sync: new Date().toISOString() } }).catch(() => undefined)
+      // reconfere com o banco: contas que ficaram completas ganham o check no Fechamento
+      if (lastParserId === 'open_finance_pluggy_v1') void autoSync(user, { force: true })
 
       // salário novo pode mudar o dia em que o mês financeiro começa
       if (toSave.some((d) => d.kind === 'credit' && SALARY_RE.test(d.descriptionRaw))) void refreshSalaryAnchors(user.id)

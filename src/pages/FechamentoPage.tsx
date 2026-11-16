@@ -13,12 +13,15 @@ import { saveMonthMode } from '@/lib/period'
 import { saveAccounts, setCoverageMark, type AccountCoverage, type TrackedAccount } from '@/lib/accounts'
 import { shiftMonth } from '@/lib/monthConsolidation'
 import { setQuietMark } from '@/lib/quietDays'
+import { autoSync } from '@/lib/ofAutoSync'
+import { readConnections, readOfCoverage } from '@/lib/openFinance'
 import { cn } from '@/lib/utils'
 
 const d2 = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
 function statusText(c: AccountCoverage): string {
   if (c.manual) return 'Marcado como completo por você'
+  if (c.openFinance) return c.status === 'completo' ? 'Conferido pelo Open Finance: tudo do banco já está no app' : 'Em dia pelo Open Finance · mês em andamento'
   if (c.status === 'completo') return `${c.count} lançamento(s) · ${d2(c.coveredFrom!)} a ${d2(c.coveredTo!)}`
   if (c.status === 'em_andamento')
     return c.account.kind === 'cartao' ? 'Fatura deste mês ainda não fechou' : `Em dia até ${d2(c.coveredTo ?? '')} · mês em andamento`
@@ -46,6 +49,14 @@ export function FechamentoPage() {
   }, [toClose, touched])
   const [modeBusy, setModeBusy] = useState(false)
   const cov = useCoverage(month)
+  // primeira vez com Open Finance: confere já com o banco (depois a conferência roda 1×/dia sozinha)
+  useEffect(() => {
+    if (!user || !readConnections(user).length || Object.keys(readOfCoverage(user)).length) return
+    if (sessionStorage.getItem('finance:of-cov-first')) return
+    sessionStorage.setItem('finance:of-cov-first', '1')
+    void autoSync(user, { force: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
   const cons = useMonthData(month)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)

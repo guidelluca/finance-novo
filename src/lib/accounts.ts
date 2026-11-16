@@ -94,6 +94,8 @@ export type AccountCoverage = {
   manual: boolean
   /** trechos do mês sem nenhum arquivo importado */
   gaps: { from: string; to: string }[]
+  /** conferido pelo Open Finance (o banco mandou tudo do período e já está no app) */
+  openFinance: boolean
 }
 
 function addDays(iso: string, n: number): string {
@@ -122,6 +124,8 @@ export function computeCoverage(
   marks: Record<string, boolean>,
   /** mês financeiro (ex.: 29/10–26/11); sem isso, mês do calendário */
   bounds?: { start: string; end: string },
+  /** trechos cobertos pelo Open Finance, por nome de conta ("Itaú", "Cartão Itaú") */
+  ofCoverage: Record<string, { from: string; to: string }[]> = {},
 ): AccountCoverage[] {
   const { start, end } = bounds ?? monthBounds(month)
   const inProgress = today < end
@@ -142,6 +146,12 @@ export function computeCoverage(
         if (t.date > r.max) r.max = t.date
       }
     }
+    // trechos que o Open Finance trouxe inteiros (mesmo dias sem movimento contam)
+    const ofRanges = Object.entries(ofCoverage)
+      .filter(([label]) => matchAccount(accounts, label, /^cart[aã]o\b/i.test(label))?.id === account.id)
+      .flatMap(([, rs]) => rs)
+    for (const r of ofRanges) byBatch.set(`of:${r.from}:${r.to}`, { min: r.from, max: r.to })
+    const ofFull = ofRanges.some((r) => r.from <= start && r.to >= until)
     // intervalos dos arquivos, recortados ao mês, unidos
     const ranges = [...byBatch.values()]
       .map((r) => ({ from: r.min < start ? start : r.min, to: r.max > end ? end : r.max }))
@@ -165,6 +175,7 @@ export function computeCoverage(
     const manual = Boolean(marks[`${month}:${account.id}`])
     let status: CoverageStatus
     if (manual) status = 'completo'
+    else if (ofFull) status = inProgress ? 'em_andamento' : 'completo'
     else if (inProgress && account.kind === 'cartao') status = 'em_andamento' // fatura ainda não fechou
     else if (merged.length === 0) status = 'falta'
     else if (gaps.length === 0) status = inProgress ? 'em_andamento' : 'completo'
@@ -177,6 +188,7 @@ export function computeCoverage(
       count,
       manual,
       gaps,
+      openFinance: ofFull,
     }
   })
 }

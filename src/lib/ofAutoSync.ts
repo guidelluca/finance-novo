@@ -1,6 +1,6 @@
 import type { User } from '@supabase/supabase-js'
 import { mergeOpenFinanceDrafts } from '@/lib/mergeMatch'
-import { fetchOpenFinanceDrafts, lastSync, ofCards, ofOverview, pluggyTag, readConnections } from '@/lib/openFinance'
+import { addOfCoverage, fetchOpenFinanceDrafts, lastSync, ofCards, ofOverview, pluggyTag, readConnections } from '@/lib/openFinance'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -60,6 +60,9 @@ export async function autoSync(user: User, opts: { force?: boolean } = {}): Prom
     const r = await fetchOpenFinanceDrafts(conns, from, to, { markSynced: false })
     const m = await mergeOpenFinanceDrafts(user.id, r.drafts)
     state.fresh = m.drafts.filter((d) => !d.excluded).length
+    // conta que veio inteira do Open Finance e já está toda no app: o mês fica conferido sozinho
+    const pendingBy = new Set(m.drafts.filter((d) => !d.excluded).map((d) => d.accountHint ?? ''))
+    await addOfCoverage(user, r.accounts.filter((a) => !pendingBy.has(a.label)).map((a) => a.label), from, to)
     // marca nos lançamentos já salvos o que a Pluggy identificou (sem mexer no resto)
     const byTemp = new Map(r.drafts.map((d) => [d.tempId, d]))
     for (const x of m.matches) {

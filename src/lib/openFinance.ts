@@ -113,7 +113,7 @@ export async function fetchOpenFinanceDrafts(
   from: string,
   to: string,
   opts: { markSynced?: boolean; onProgress?: (done: number, total: number) => void } = {},
-): Promise<{ drafts: TransactionDraft[]; warnings: string[] }> {
+): Promise<{ drafts: TransactionDraft[]; warnings: string[]; accounts: { label: string; isCard: boolean }[] }> {
   // períodos longos vão em pedaços de ~2 meses, um banco por vez (a função tem limite de tempo)
   // e o fim vai 1 dia além de hoje: o filtro da Pluggy é em UTC e lançamentos da noite caíam fora
   const plusDay = (iso: string, n: number) => {
@@ -194,7 +194,11 @@ export async function fetchOpenFinanceDrafts(
   warnings.push(`Open Finance (Meu Pluggy): ${drafts.length} lançamento(s) de ${r.accounts.length} conta(s)/cartão(ões), de ${r.from.split('-').reverse().join('/')} a ${r.to.split('-').reverse().join('/')}.`)
   if (pending) warnings.push(`${pending} lançamento(s) ainda pendente(s) no banco.`)
   if (opts.markSynced !== false) await supabase.auth.updateUser({ data: { pluggy_last_sync: new Date().toISOString() } }).catch(() => undefined)
-  return { drafts, warnings }
+  const accounts = r.accounts.map((a) => {
+    const bank = bankOf.get(a.itemId) ?? a.connector ?? 'Banco'
+    return { label: ofAccountLabel(bank, a.account.type), isCard: a.account.type === 'CREDIT' }
+  })
+  return { drafts, warnings, accounts }
 }
 
 export type OfCard = {
@@ -335,4 +339,40 @@ function saveBalanceSnapshot(o: OfOverview) {
   } catch {
     /* sem armazenamento */
   }
+}
+
+/* ------------------------------------------------------------ cobertura pelo Open Finance */
+
+/** Trechos em que o Open Finance trouxe a conta inteira e tudo já está no app: { "Itaú": [{from,to}] } */
+export type OfCoverage = Record<string, { from: string; to: string }[]>
+
+export function readOfCoverage(user: User | null): OfCoverage {
+  const raw = user?.user_metadata?.of_coverage
+  return raw && typeof raw === 'object' ? (raw as OfCoverage) : {}
+}
+
+function plus1(iso: string) {
+  const d = new Date(`${iso}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+export function mergeRanges(list: { from: string; to: string }[]): { from: string; to: string }[] {
+  const out: { from: string; to: string }[] = []
+  for (const r of [...list].sort((a, b) => (a.from < b.from ? -1 : 1))) {
+    const last = out[out.length - 1]
+    if (last && r.from <= plus1(last.to)) {
+      if (r.to > last.to) last.to = r.to
+    } else out.push({ ...r })
+  }
+  return out
+}
+
+/** Marca contas como cobertas pelo Open Finance no período (guarda na sua conta, vale em todos os aparelhos). */
+export async function addOfCoverage(user: User, labels: string[], from: string, to: string): Promise<void> {
+  if (!labels.length) return
+  const cur = readOfCoverage(user)
+  const next: OfCoverage = { ...cur }
+  for (const l of labels) next[l] = mergeRanges([...(cur[l] ?? []), { from, to }]).slice(-12)
+  await supabase.auth.updateUser({ data: { of_coverage: next } }).catch(() => undefined)
 }

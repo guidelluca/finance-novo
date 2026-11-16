@@ -11,6 +11,7 @@ import {
   type CoverageTx,
 } from '@/lib/accounts'
 import { computeQuietDays, readQuietMarks } from '@/lib/quietDays'
+import { readOfCoverage } from '@/lib/openFinance'
 
 /** Cobertura dos extratos de cada conta acompanhada no mês. */
 export function useCoverage(month: string) {
@@ -40,7 +41,7 @@ export function useCoverage(month: string) {
 
   const accounts = useMemo(() => readAccounts(user), [user])
   const coverage: AccountCoverage[] = useMemo(
-    () => computeCoverage(month, accounts, txs, format(new Date(), 'yyyy-MM-dd'), readCoverageMarks(user), bounds),
+    () => computeCoverage(month, accounts, txs, format(new Date(), 'yyyy-MM-dd'), readCoverageMarks(user), bounds, readOfCoverage(user)),
     [month, accounts, txs, user, bounds],
   )
   const quiet = useMemo(
