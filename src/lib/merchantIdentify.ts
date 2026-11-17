@@ -203,7 +203,13 @@ export function stripWallet(text: string): string {
 }
 
 export function cleanDescriptor(raw: string, cityHint?: string | null): string {
-  let s = stripWallet(raw.replace(/\s*\(parcela \d+\/\d+\)\s*$/i, '')).replace(/\s+/g, ' ').trim()
+  let s = stripWallet(
+    raw
+      .replace(/\s+·\s+(pendente|entre contas suas|pagamento de fatura|investimento)\b/gi, '')
+      .replace(/\s*\(parcela \d+\/\d+\)\s*$/i, ''),
+  )
+    .replace(/\s+/g, ' ')
+    .trim()
   const city = cityHint?.trim().toUpperCase()
   if (city && city.length >= 3) {
     // corta o maior prefixo da cidade que esteja colado no fim (mín. 2 letras)

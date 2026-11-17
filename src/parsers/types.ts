@@ -25,6 +25,8 @@ export interface TransactionDraft {
   categoryId?: string | null
   /** Categoria que a Pluggy (Open Finance) deu, em inglês, ex.: "Food delivery" */
   ofCategory?: string | null
+  /** Open Finance: compra ainda pendente no banco (não entrou oficialmente na fatura/extrato) */
+  ofPending?: boolean
   /** Texto da coluna Categoria em exports / planilhas — resolvido para id na UI */
   categoryHint?: string | null
   /** Coluna Conta / banco no CSV Finance PWA — sobrescreve o rótulo por ficheiro ao gravar */

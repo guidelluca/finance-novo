@@ -92,7 +92,12 @@ export function useMonthData(month: string) {
   useEffect(() => {
     const on = () => void load()
     window.addEventListener('finance:recategorized', on)
-    return () => window.removeEventListener('finance:recategorized', on)
+    // Open Finance salvou ou confirmou lançamentos sozinho
+    window.addEventListener('finance:of-synced', on)
+    return () => {
+      window.removeEventListener('finance:recategorized', on)
+      window.removeEventListener('finance:of-synced', on)
+    }
   }, [load])
 
   // planilha da casa lida (ou relida) em outra tela: recalcula o mês

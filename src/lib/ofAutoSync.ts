@@ -1,6 +1,7 @@
 import type { User } from '@supabase/supabase-js'
 import { mergeOpenFinanceDrafts } from '@/lib/mergeMatch'
-import { addOfCoverage, fetchOpenFinanceDrafts, lastSync, ofCards, ofOverview, pluggyTag, readConnections } from '@/lib/openFinance'
+import { autoSaveDrafts, settlePending } from '@/lib/ofAutoImport'
+import { addOfCoverage, fetchOpenFinanceDrafts, lastSync, ofCards, ofOverview, PENDING_TAG, pluggyTag, readConnections } from '@/lib/openFinance'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -15,12 +16,16 @@ export type AutoSyncState = {
   from: string
   to: string
   tagged: number
+  /** salvos sozinhos nesta sincronização / pendentes confirmados / pendentes que sumiram */
+  saved?: number
+  confirmed?: number
+  removed?: number
   error: string | null
 }
 
 export const OF_SYNC_EVENT = 'finance:of-synced'
 const KEY = 'finance:of-auto'
-const EVERY_MS = 20 * 3_600_000
+const EVERY_MS = 3 * 3_600_000
 const running = { on: false }
 
 export function readAutoSync(): AutoSyncState | null {
@@ -59,21 +64,34 @@ export async function autoSync(user: User, opts: { force?: boolean } = {}): Prom
     await Promise.allSettled([ofOverview(conns), ofCards(conns)])
     const r = await fetchOpenFinanceDrafts(conns, from, to, { markSynced: false })
     const m = await mergeOpenFinanceDrafts(user.id, r.drafts)
-    state.fresh = m.drafts.filter((d) => !d.excluded).length
-    // conta que veio inteira do Open Finance e já está toda no app: o mês fica conferido sozinho
-    const pendingBy = new Set(m.drafts.filter((d) => !d.excluded).map((d) => d.accountHint ?? ''))
-    await addOfCoverage(user, r.accounts.filter((a) => !pendingBy.has(a.label)).map((a) => a.label), from, to)
+    // pendentes já salvos: confirma os que entraram oficialmente e apaga os que sumiram
+    const settled = await settlePending(user, from, r.drafts, m.matches)
+    state.confirmed = settled.confirmed
+    state.removed = settled.removed
     // marca nos lançamentos já salvos o que a Pluggy identificou (sem mexer no resto)
     const byTemp = new Map(r.drafts.map((d) => [d.tempId, d]))
     for (const x of m.matches) {
       const d = byTemp.get(x.tempId)
       if (!d?.ofCategory) continue
       const isCard = Boolean(d.cardLast4) || /^cart[aã]o\b/i.test(d.accountHint ?? '')
+      if (x.rowDesc.includes(PENDING_TAG)) continue
       const tag = pluggyTag(d.ofCategory, x.rowDesc, isCard)
       if (!tag) continue
       const { error } = await supabase.from('transactions').update({ description_raw: `${x.rowDesc}${tag}` }).eq('id', x.rowId)
       if (!error) state.tagged += 1
     }
+    // o que é novo entra sozinho (inclusive compras pendentes, marcadas como "pendente")
+    let saved = 0
+    try {
+      saved = await autoSaveDrafts(user, m.drafts)
+    } catch (e) {
+      state.error = `Não consegui salvar sozinho: ${(e as Error).message}`
+    }
+    state.saved = saved
+    state.fresh = Math.max(0, m.drafts.filter((d) => !d.excluded).length - saved)
+    if (saved) await supabase.auth.updateUser({ data: { pluggy_last_sync: new Date().toISOString() } }).catch(() => undefined)
+    // conta que veio inteira do Open Finance e já está toda no app: o mês fica conferido sozinho
+    if (!state.fresh) await addOfCoverage(user, r.accounts.map((a) => a.label), from, to)
   } catch (e) {
     state.error = (e as Error).message
   } finally {

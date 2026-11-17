@@ -15,6 +15,7 @@ import { formatBRLFromCents } from '@/lib/currency'
 import { normalizeTransactionLogicalDescription, transactionDedupCandidates } from '@/lib/dedupKey'
 import { markHouseTx } from '@/lib/house'
 import { readAccounts } from '@/lib/accounts'
+import { PENDING_TAG } from '@/lib/openFinance'
 import { countModeOf, setCountMode, type CountMode } from '@/lib/countOverride'
 import { learnRules } from '@/lib/learnRules'
 import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
@@ -118,6 +119,13 @@ export function ExtratoPage() {
 
   useEffect(() => {
     void load()
+  }, [load])
+
+  // Open Finance salvou ou confirmou lançamentos sozinho
+  useEffect(() => {
+    const on = () => void load()
+    window.addEventListener('finance:of-synced', on)
+    return () => window.removeEventListener('finance:of-synced', on)
   }, [load])
 
   useEffect(() => {
@@ -652,6 +660,11 @@ export function ExtratoPage() {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{merchantOf(t)}</span>
                         <span className={cn('block truncate text-xs', cat || ex ? 'text-muted' : 'text-warning')}>
+                          {t.description_raw.endsWith(PENDING_TAG) ? (
+                            <span className="mr-1 rounded-full bg-[#fff6dc] px-1.5 py-px text-[10px] font-semibold text-[#7a5300] dark:bg-[#2d2612] dark:text-[#f5c451]">
+                              pendente
+                            </span>
+                          ) : null}
                           {forcedSet.has(t.id)
                             ? `${cat ?? 'Sem categoria'} · você marcou: conta`
                             : faturaById.get(t.id) && faturaById.get(t.id)!.countedCents > 0

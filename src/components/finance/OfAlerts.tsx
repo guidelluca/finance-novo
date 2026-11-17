@@ -57,7 +57,7 @@ export function OfAlerts({ today, pace }: { today: string; pace: { deltaPct: num
   const [showAll, setShowAll] = useState(false)
   const shown = showAll ? alerts : alerts.slice(0, 3)
 
-  if (!alerts.length && !(hasOf && sync && sync.fresh > 0)) return null
+  if (!alerts.length && !(hasOf && sync && (sync.fresh > 0 || sync.saved || sync.confirmed || sync.removed))) return null
   return (
     <section className="space-y-2" aria-label="Alertas">
       {hasOf && sync && sync.fresh > 0 ? (
@@ -68,6 +68,17 @@ export function OfAlerts({ today, pace }: { today: string; pace: { deltaPct: num
           </span>
           <ChevronRight className="size-4" />
         </Link>
+      ) : null}
+      {hasOf && sync && (sync.saved || sync.confirmed || sync.removed) ? (
+        <p className="flex items-center gap-2 rounded-2xl border border-border bg-surface px-3 py-2 text-xs text-muted">
+          <Landmark className="size-3.5 shrink-0" />
+          <span>
+            Bancos sincronizados {new Date(sync.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            {sync.saved ? ` · ${sync.saved} novo(s) salvo(s)` : ''}
+            {sync.confirmed ? ` · ${sync.confirmed} pendente(s) confirmado(s)` : ''}
+            {sync.removed ? ` · ${sync.removed} pendente(s) cancelado(s) pelo banco` : ''}
+          </span>
+        </p>
       ) : null}
       {shown.map((a) => (
         <div

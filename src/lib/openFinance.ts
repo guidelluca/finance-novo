@@ -93,6 +93,9 @@ function localDate(iso: string): string {
   return new Date(d.getTime() - 3 * 3_600_000).toISOString().slice(0, 10)
 }
 
+/** Marca de lançamento ainda pendente no banco (some quando ele entra oficialmente). */
+export const PENDING_TAG = ' · pendente'
+
 const OWN_TRANSFER_CATS = /^same person transfer$/i
 const CARD_PAYMENT_CATS = /^credit card payment$/i
 const INVEST_CATS = /^(investments|automatic investment|fixed income|mutual funds|variable income|pension)$/i
@@ -165,7 +168,7 @@ export async function fetchOpenFinanceDrafts(
       const base = `${(t.description || t.merchant || 'Sem descrição').replace(/\s+/g, ' ').trim()}${inst}`
       // a Pluggy já sabe o que é transferência entre contas suas, pagamento de fatura e aplicação:
       // deixa isso escrito na descrição para o fechamento do mês tirar da soma automaticamente
-      const desc = base + pluggyTag(t.category, base, isCard)
+      const desc = base + pluggyTag(t.category, base, isCard) + (t.status === 'PENDING' ? PENDING_TAG : '')
       const kind = t.type === 'CREDIT' ? 'credit' : 'debit'
       // no cartão, "pagamento recebido" é a fatura paga pela conta: já aparece no extrato do banco
       const cardPayment = isCard && kind === 'credit' && PAYMENT.test(desc)
@@ -180,6 +183,7 @@ export async function fetchOpenFinanceDrafts(
         descriptionRaw: desc,
         accountHint: account,
         ofCategory: t.category ?? null,
+        ofPending: t.status === 'PENDING',
         cardLast4: isCard ? (t.installment?.cardNumber?.replace(/\D/g, '').slice(-4) || last4) : null,
         excluded: cardPayment,
         reviewFlags: [
