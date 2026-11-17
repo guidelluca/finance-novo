@@ -1,3 +1,4 @@
+import { withForced } from '@/lib/countOverride'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useEffect, useMemo, useState } from 'react'
@@ -84,7 +85,7 @@ export function HomeDashboard({ month, result, monthTxs, history, periods, range
       const r =
         m === month
           ? result
-          : consolidateMonth(m, all.filter((t) => periods.periodOf(t.date) === m), all.filter((t) => periods.periodOf(t.date) < m), today, dismissed, owner, periods.periodOf, readHouseWithSheets(user))
+          : consolidateMonth(m, all.filter((t) => periods.periodOf(t.date) === m), all.filter((t) => periods.periodOf(t.date) < m), today, withForced(dismissed, user), owner, periods.periodOf, readHouseWithSheets(user))
       return {
         key: m,
         label: format(parseISO(`${m}-01`), 'MMM', { locale: ptBR }).replace('.', ''),

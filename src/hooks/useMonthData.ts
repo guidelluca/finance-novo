@@ -1,3 +1,4 @@
+import { withForced } from '@/lib/countOverride'
 import { format } from 'date-fns'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -141,7 +142,7 @@ export function useMonthData(month: string) {
         monthTxs,
         history,
         format(new Date(), 'yyyy-MM-dd'),
-        dismissed,
+        withForced(dismissed, user),
         (user?.user_metadata?.owner_name as string | undefined) ?? null,
         periods.periodOf,
         readHouseWithSheets(user),

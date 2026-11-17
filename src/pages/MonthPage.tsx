@@ -1,3 +1,4 @@
+import { withForced } from '@/lib/countOverride'
 import { format } from 'date-fns'
 import { AlertTriangle, ChevronDown, Download, EyeOff, Info } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -166,7 +167,7 @@ export function MonthPage() {
       all.filter((t) => periods.periodOf(t.date) === month),
       all.filter((t) => periods.periodOf(t.date) < month),
       format(new Date(), 'yyyy-MM-dd'),
-      dismissed,
+      withForced(dismissed, user),
       (user?.user_metadata?.owner_name as string | undefined) ?? null,
       periods.periodOf,
       readHouse(user),

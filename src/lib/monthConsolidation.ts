@@ -37,7 +37,7 @@ export type ConsItem = ConsTx & {
   ruleKey: string | null
 }
 
-export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento' | 'estorno' | 'linha_invalida' | 'casa' | 'valor_improvavel'
+export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento' | 'estorno' | 'linha_invalida' | 'casa' | 'valor_improvavel' | 'manual'
 
 export type Excluded = { tx: ConsItem; reason: ExcludedReason; relatedId?: string; note: string }
 
@@ -87,6 +87,8 @@ export type CategoryGroup = {
 export type ConsolidatedMonth = {
   month: string // YYYY-MM
   dismissedCount: number
+  /** lançamentos que você mandou contar mesmo com motivo para não contar */
+  forcedIds: string[]
   included: ConsItem[]
   excluded: Excluded[]
   totals: { incomeCents: number; expenseCents: number; netCents: number }
@@ -309,6 +311,11 @@ export function consolidateMonth(
   const excluded = new Map<string, Excluded>()
   const exclude = (tx: ConsItem, reason: ExcludedReason, note: string, relatedId?: string) => {
     if (!excluded.has(tx.id)) excluded.set(tx.id, { tx, reason, note, relatedId })
+  }
+
+  // 0) você marcou "não conta" à mão: vale antes de qualquer regra
+  for (const t of items) {
+    if (dismissed.has(`skip:${t.id}`)) exclude(t, 'manual', 'Você marcou para não contar')
   }
 
   // 1) Investimentos (aplicação/resgate) não são gasto nem receita
@@ -696,6 +703,17 @@ export function consolidateMonth(
     })
   }
 
+  // você mandou contar: tira do "não conta" e volta o valor cheio (vale para qualquer motivo)
+  const forcedIds: string[] = []
+  for (let i = 0; i < items.length; i++) {
+    const t = items[i]!
+    if (!dismissed.has(`force:${t.id}`)) continue
+    forcedIds.push(t.id)
+    excluded.delete(t.id)
+    const orig = monthTxs.find((o) => o.id === t.id)
+    if (orig && orig.amountCents !== t.amountCents) items[i] = { ...t, amountCents: orig.amountCents }
+  }
+
   const included = items.filter((t) => !excluded.has(t.id))
   const expenses = included.filter((t) => t.kind === 'debit')
   const incomes = included.filter((t) => t.kind === 'credit')
@@ -957,6 +975,7 @@ export function consolidateMonth(
   return {
     month,
     dismissedCount: issues.filter((i) => dismissed.has(i.id)).length,
+    forcedIds,
     included,
     excluded: [...excluded.values()],
     totals: { incomeCents, expenseCents, netCents: incomeCents - expenseCents },

@@ -14,6 +14,8 @@ import { parseBRLToCents } from '@/lib/budgets'
 import { formatBRLFromCents } from '@/lib/currency'
 import { normalizeTransactionLogicalDescription, transactionDedupCandidates } from '@/lib/dedupKey'
 import { markHouseTx } from '@/lib/house'
+import { readAccounts } from '@/lib/accounts'
+import { countModeOf, setCountMode, type CountMode } from '@/lib/countOverride'
 import { learnRules } from '@/lib/learnRules'
 import { identifyMerchant, pickCategoryId } from '@/lib/merchantIdentify'
 import { issueId, shiftMonth, type ExcludedReason } from '@/lib/monthConsolidation'
@@ -25,7 +27,7 @@ import { tileColors } from '@/pages/HomePage'
 import type { Category, Rule, Transaction } from '@/types/database'
 
 type Chip = 'all' | 'out' | 'in' | 'none' | 'dup'
-type Form = { date: string; description: string; amount: string; kind: 'debit' | 'credit'; categoryId: string; account: string }
+type Form = { date: string; description: string; amount: string; kind: 'debit' | 'credit'; categoryId: string; account: string; count: CountMode }
 
 const EXCLUDED_LABEL: Record<ExcludedReason, string> = {
   duplicada: 'repetida? — só conta se você confirmar',
@@ -36,6 +38,7 @@ const EXCLUDED_LABEL: Record<ExcludedReason, string> = {
   linha_invalida: 'não é lançamento (saldo/cabeçalho) — apague',
   casa: 'da casa — não conta no seu',
   valor_improvavel: 'valor improvável — confira',
+  manual: 'você marcou: não conta',
 }
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
@@ -80,7 +83,7 @@ export function ExtratoPage() {
   const [edit, setEdit] = useState<Form | null>(null)
   const [confirmDel, setConfirmDel] = useState(false)
   const [adding, setAdding] = useState(() => params.get('new') === '1')
-  const [newForm, setNewForm] = useState<Form>({ date: today, description: '', amount: '', kind: 'debit', categoryId: '', account: '' })
+  const [newForm, setNewForm] = useState<Form>({ date: today, description: '', amount: '', kind: 'debit', categoryId: '', account: '', count: 'auto' })
   const [learn, setLearn] = useState(true)
   const [busy, setBusy] = useState(false)
 
@@ -147,7 +150,9 @@ export function ExtratoPage() {
   const rentById = useMemo(() => new Map(cons.result.rentShares.map((r) => [r.txId, r])), [cons.result])
   // pagamento de fatura com só parte das compras importadas: conta a diferença
   const faturaById = useMemo(() => new Map(cons.result.faturaChecks.map((f) => [f.txId, f])), [cons.result])
+  const forcedSet = useMemo(() => new Set(cons.result.forcedIds), [cons.result])
   const countedCents = (t: Transaction) => {
+    if (forcedSet.has(t.id)) return t.amount_cents
     const r = rentById.get(t.id)
     if (r && r.shareCents > 0) return r.shareCents
     const f = faturaById.get(t.id)
@@ -219,6 +224,7 @@ export function ExtratoPage() {
       kind: t.kind,
       categoryId: t.category_id ?? '',
       account: t.account ?? '',
+      count: countModeOf(user, t.id),
     })
   }
 
@@ -250,6 +256,13 @@ export function ExtratoPage() {
     }
     if (edit.categoryId && edit.categoryId !== t.category_id && learn && user) {
       await learnRules(user.id, [{ key: identifyMerchant(edit.description).ruleKey, categoryId: edit.categoryId }])
+    }
+    if (user && edit.count !== countModeOf(user, t.id)) {
+      try {
+        await setCountMode(user, t.id, edit.count)
+      } catch (err) {
+        setError(`Não consegui salvar se conta ou não: ${(err as Error).message}`)
+      }
     }
     setOpenId(null)
     setNotice('Lançamento atualizado.')
@@ -342,7 +355,7 @@ export function ExtratoPage() {
     }
     setNotice(`Adicionado: ${identifyMerchant(desc).name}.`)
     setAdding(false)
-    setNewForm({ date: today, description: '', amount: '', kind: 'debit', categoryId: '', account: '' })
+    setNewForm({ date: today, description: '', amount: '', kind: 'debit', categoryId: '', account: '', count: 'auto' })
     if (periods.periodOf(newForm.date) !== month) {
       setTouched(true)
       setMonth(periods.periodOf(newForm.date))
@@ -362,31 +375,89 @@ export function ExtratoPage() {
     ...(dupCount > 0 || chip === 'dup' ? [{ id: 'dup' as const, label: `Repetidas? · ${dupCount}` }] : []),
   ]
 
-  const formFields = (f: Form, set: (f: Form) => void) => (
+  const accountOptions = useMemo(
+    () => [...new Set([...readAccounts(user).map((a) => a.name), ...txs.map((t) => t.account).filter((a): a is string => Boolean(a))])].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    [user, txs],
+  )
+  const lbl = 'mb-1 block text-[11px] font-medium text-muted'
+  const inp = 'h-11 w-full rounded-xl border border-border bg-background px-3'
+  const catLabel = (c: Category) => {
+    const parent = c.parent_id ? categories.find((p) => p.id === c.parent_id) : null
+    return parent ? `${parent.name} › ${c.name}` : c.name
+  }
+  const formFields = (f: Form, set: (f: Form) => void, ex?: { reason: ExcludedReason; note: string } | null, showCount = false) => (
     <div className="space-y-2.5">
-      <input value={f.description} onChange={(e) => set({ ...f, description: e.target.value })} placeholder="Descrição (ex.: Padaria Real)" aria-label="Descrição" className="h-11 w-full rounded-xl border border-border bg-background px-3" />
+      <label className="block">
+        <span className={lbl}>Descrição</span>
+        <input value={f.description} onChange={(e) => set({ ...f, description: e.target.value })} placeholder="Ex.: Padaria Real" className={inp} />
+      </label>
       <div className="grid grid-cols-2 gap-2.5">
-        <input inputMode="decimal" value={f.amount} onChange={(e) => set({ ...f, amount: e.target.value })} placeholder="Valor (R$)" aria-label="Valor" className="h-11 rounded-xl border border-border bg-background px-3 text-right tabular-nums" />
-        <input type="date" value={f.date} onChange={(e) => set({ ...f, date: e.target.value })} aria-label="Data" className="h-11 rounded-xl border border-border bg-background px-3" />
+        <label className="block">
+          <span className={lbl}>Valor (R$)</span>
+          <input inputMode="decimal" value={f.amount} onChange={(e) => set({ ...f, amount: e.target.value })} placeholder="0,00" className={cn(inp, 'text-right tabular-nums')} />
+        </label>
+        <label className="block">
+          <span className={lbl}>Data</span>
+          <input type="date" value={f.date} onChange={(e) => set({ ...f, date: e.target.value })} className={inp} />
+        </label>
       </div>
       <div className="grid grid-cols-2 gap-2.5">
-        <div className="grid grid-cols-2 gap-1 rounded-xl bg-background p-1 text-sm" role="radiogroup" aria-label="Tipo">
-          {(['debit', 'credit'] as const).map((k) => (
-            <button key={k} type="button" role="radio" aria-checked={f.kind === k} onClick={() => set({ ...f, kind: k })} className={cn('rounded-lg py-1.5 font-semibold', f.kind === k ? 'bg-surface shadow-sm' : 'text-muted')}>
-              {k === 'debit' ? 'Saída' : 'Entrada'}
+        <div>
+          <span className={lbl}>Tipo</span>
+          <div className="grid h-11 grid-cols-2 gap-1 rounded-xl bg-background p-1 text-sm" role="radiogroup" aria-label="Tipo">
+            {(['debit', 'credit'] as const).map((k) => (
+              <button key={k} type="button" role="radio" aria-checked={f.kind === k} onClick={() => set({ ...f, kind: k })} className={cn('rounded-lg font-semibold', f.kind === k ? 'bg-surface shadow-sm' : 'text-muted')}>
+                {k === 'debit' ? 'Saída' : 'Entrada'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="block">
+          <span className={lbl}>Conta ou cartão</span>
+          <input list="finance-accounts" value={f.account} onChange={(e) => set({ ...f, account: e.target.value })} placeholder="Ex.: Itaú, Cartão PicPay" className={inp} />
+        </label>
+      </div>
+      <datalist id="finance-accounts">
+        {accountOptions.map((a) => (
+          <option key={a} value={a} />
+        ))}
+      </datalist>
+      <label className="block">
+        <span className={lbl}>Categoria</span>
+        <select value={f.categoryId} onChange={(e) => set({ ...f, categoryId: e.target.value })} className={inp}>
+          <option value="">Categoria automática</option>
+          {[...categories].sort((x, y) => catLabel(x).localeCompare(catLabel(y), 'pt-BR')).map((c) => (
+            <option key={c.id} value={c.id}>
+              {catLabel(c)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {showCount ? (
+      <div>
+        <span className={lbl}>Nos totais do mês</span>
+        <div className="grid grid-cols-3 gap-1 rounded-xl bg-background p-1 text-sm" role="radiogroup" aria-label="Nos totais do mês">
+          {([
+            ['auto', 'Automático'],
+            ['conta', 'Conta'],
+            ['nao_conta', 'Não conta'],
+          ] as [CountMode, string][]).map(([k, l]) => (
+            <button key={k} type="button" role="radio" aria-checked={f.count === k} onClick={() => set({ ...f, count: k })} className={cn('rounded-lg py-2 font-semibold', f.count === k ? 'bg-surface shadow-sm' : 'text-muted')}>
+              {l}
             </button>
           ))}
         </div>
-        <input value={f.account} onChange={(e) => set({ ...f, account: e.target.value })} placeholder="Conta (opcional)" aria-label="Conta" className="h-11 rounded-xl border border-border bg-background px-3" />
+        <p className="mt-1 text-[11px] text-muted">
+          {f.count === 'conta'
+            ? 'Vai contar com o valor cheio, mesmo que o app ache que é fatura, transferência, aplicação, repetida ou da casa.'
+            : f.count === 'nao_conta'
+              ? 'Não entra nos seus totais (fica no extrato, riscado).'
+              : ex && ex.reason !== 'manual'
+                ? `Hoje o app não conta: ${ex.note}. Escolha “Conta” para contar mesmo assim.`
+                : 'O app decide pelas regras (fatura, transferência, casa, repetida…).'}
+        </p>
       </div>
-      <select value={f.categoryId} onChange={(e) => set({ ...f, categoryId: e.target.value })} aria-label="Categoria" className="h-11 w-full rounded-xl border border-border bg-background px-3">
-        <option value="">Categoria automática</option>
-        {categories.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+      ) : null}
     </div>
   )
 
@@ -581,7 +652,9 @@ export function ExtratoPage() {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{merchantOf(t)}</span>
                         <span className={cn('block truncate text-xs', cat || ex ? 'text-muted' : 'text-warning')}>
-                          {faturaById.get(t.id) && faturaById.get(t.id)!.countedCents > 0
+                          {forcedSet.has(t.id)
+                            ? `${cat ?? 'Sem categoria'} · você marcou: conta`
+                            : faturaById.get(t.id) && faturaById.get(t.id)!.countedCents > 0
                             ? faturaById.get(t.id)!.detailedCents > 0
                               ? `Fatura · ${formatBRLFromCents(faturaById.get(t.id)!.countedCents)} sem detalhe de ${formatBRLFromCents(t.amount_cents)}`
                               : `Fatura do ${faturaById.get(t.id)!.issuer} · conta inteira (compras não importadas)`
@@ -675,7 +748,7 @@ export function ExtratoPage() {
                             </Button>
                           </div>
                         ) : null}
-                        {formFields(edit, setEdit)}
+                        {formFields(edit, setEdit, ex, true)}
                         <div className="flex flex-wrap gap-2">
                           <Button size="sm" onClick={() => void saveEdit(t)} disabled={busy}>
                             Salvar
