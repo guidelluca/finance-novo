@@ -65,7 +65,7 @@ export async function autoSync(user: User, opts: { force?: boolean } = {}): Prom
     const r = await fetchOpenFinanceDrafts(conns, from, to, { markSynced: false })
     const m = await mergeOpenFinanceDrafts(user.id, r.drafts)
     // pendentes já salvos: confirma os que entraram oficialmente e apaga os que sumiram
-    const settled = await settlePending(user, from, r.drafts, m.matches)
+    const settled = r.drafts.length ? await settlePending(user, from, r.drafts, m.matches) : { confirmed: 0, removed: 0 }
     state.confirmed = settled.confirmed
     state.removed = settled.removed
     // marca nos lançamentos já salvos o que a Pluggy identificou (sem mexer no resto)
