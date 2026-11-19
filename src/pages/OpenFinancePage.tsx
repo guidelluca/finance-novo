@@ -2,6 +2,7 @@ import { Check, Copy, ExternalLink, Plus, RefreshCw, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import fnCode from '../../supabase/functions/pluggy-sync/index.ts?raw'
+import { OfAccountCheck } from '@/components/finance/OfAccountCheck'
 import { OfCardsPanel } from '@/components/finance/OfCardsPanel'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
@@ -146,6 +147,7 @@ export function OpenFinancePage() {
       <Link to="/import?of=all" className="flex items-center justify-between rounded-2xl border border-border bg-surface p-3 text-sm font-semibold">
         Trazer tudo dos bancos (12 meses), sem repetir o que já está no app <span aria-hidden>→</span>
       </Link>
+      <OfAccountCheck />
       <OfCardsPanel compact />
 
       <section className="space-y-2.5 rounded-3xl border border-border bg-surface p-[18px]">
