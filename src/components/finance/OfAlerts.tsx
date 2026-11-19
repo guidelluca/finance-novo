@@ -57,7 +57,7 @@ export function OfAlerts({ today, pace }: { today: string; pace: { deltaPct: num
   const [showAll, setShowAll] = useState(false)
   const shown = showAll ? alerts : alerts.slice(0, 3)
 
-  if (!alerts.length && !(hasOf && sync && (sync.fresh > 0 || sync.saved || sync.confirmed || sync.removed))) return null
+  if (!alerts.length && !(hasOf && sync && (sync.fresh > 0 || sync.saved || sync.confirmed || sync.removed || sync.error))) return null
   return (
     <section className="space-y-2" aria-label="Alertas">
       {hasOf && sync && sync.fresh > 0 ? (
@@ -67,6 +67,14 @@ export function OfAlerts({ today, pace }: { today: string; pace: { deltaPct: num
             <b>{sync.fresh} lançamento(s) novo(s)</b> nos bancos desde a última importação. Revisar e salvar
           </span>
           <ChevronRight className="size-4" />
+        </Link>
+      ) : null}
+      {hasOf && sync?.error ? (
+        <Link to="/open-finance" className="flex items-start gap-2 rounded-2xl border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
+          <Landmark className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            A busca nos bancos falhou: {sync.error} <b className="underline">Abrir Open Finance</b>
+          </span>
         </Link>
       ) : null}
       {hasOf && sync && (sync.saved || sync.confirmed || sync.removed) ? (

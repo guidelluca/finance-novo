@@ -76,7 +76,9 @@ export function matchPairs(news: Side[], olds: Side[]): Map<string, { old: Side;
       if (ni && oi && ni !== oi) continue
       const nc = isCardAccount(n.account, n.cardId)
       const oc = isCardAccount(o.account, o.cardId)
-      if (n.account && o.account && nc !== oc) continue
+      // compra no cartão só casa com lançamento de cartão (nunca com Pix/débito da conta ou lançamento sem conta)
+      if (nc !== oc && (nc || (n.account && o.account))) continue
+      if (nc && oc && (!ni || !oi) && n.account && o.account && fold(n.account) !== fold(o.account) && (ni || oi)) continue
       const dd = days(n.date, o.date)
       const pn = parcela(n.desc)
       const samePar = Boolean(pn && pn === parcela(o.desc))
