@@ -78,7 +78,15 @@ export function AppShell() {
   const uid = user?.id
   useEffect(() => {
     if (!user) return
-    const t = window.setTimeout(() => void autoSync(user).catch(() => undefined), 2500)
+    // correção das compras de cartão (v1): força uma busca agora para salvar o que ficou de fora
+    let force = false
+    try {
+      force = !localStorage.getItem('finance:of-card-fix-v1')
+      if (force) localStorage.setItem('finance:of-card-fix-v1', '1')
+    } catch {
+      /* sem armazenamento */
+    }
+    const t = window.setTimeout(() => void autoSync(user, { force }).catch(() => undefined), 2500)
     return () => window.clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid])
