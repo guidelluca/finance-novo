@@ -6,6 +6,7 @@
  * Sem dependências externas (testável isoladamente). Nada é apagado aqui: só classifica.
  */
 import { classifyHouse, residentOf, selfResident, type HouseConfig } from '@/lib/house'
+import { parseInstallment, scheduleInstallments } from '@/lib/installmentSchedule'
 import { sheetTabForPayment, tabToYm, type SheetResident } from '@/lib/houseSheet'
 import { identifyMerchant } from './merchantIdentify'
 
@@ -37,7 +38,7 @@ export type ConsItem = ConsTx & {
   ruleKey: string | null
 }
 
-export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento' | 'estorno' | 'linha_invalida' | 'casa' | 'valor_improvavel' | 'manual'
+export type ExcludedReason = 'duplicada' | 'pagamento_fatura' | 'transferencia_interna' | 'investimento' | 'estorno' | 'linha_invalida' | 'casa' | 'valor_improvavel' | 'manual' | 'parcela_outro_mes'
 
 export type Excluded = { tx: ConsItem; reason: ExcludedReason; relatedId?: string; note: string }
 
@@ -102,6 +103,20 @@ export type ConsolidatedMonth = {
   plannedRent: PlannedRent | null
   /** pagamentos de fatura × compras importadas do mesmo cartão */
   faturaChecks: FaturaCheck[]
+  /** parcelas de compras anteriores que caem neste mês (previstas ou trazidas da data da compra) */
+  installments: InstallmentItem[]
+}
+
+export type InstallmentItem = {
+  id: string
+  date: string
+  description: string
+  account: string | null
+  cents: number
+  n: number
+  of: number
+  /** prevista = ainda não veio do banco; movida = o banco datou na compra, conta neste mês */
+  kind: 'prevista' | 'movida'
 }
 
 export type FaturaCheck = {
@@ -316,6 +331,16 @@ export function consolidateMonth(
   // 0) você marcou "não conta" à mão: vale antes de qualquer regra
   for (const t of items) {
     if (dismissed.has(`skip:${t.id}`)) exclude(t, 'manual', 'Você marcou para não contar')
+  }
+
+  // 0p) parcelas: cada uma conta no mês em que é cobrada (não no mês da compra)
+  const sched = scheduleInstallments([...hist, ...items])
+  for (const t of items) {
+    const eff = sched.effDate.get(t.id)
+    if (eff && monthOf(eff) !== month) {
+      const p = parseInstallment(t.description)
+      exclude(t, 'parcela_outro_mes', `Parcela ${p?.n}/${p?.of}: conta em ${eff.slice(8, 10)}/${eff.slice(5, 7)}/${eff.slice(0, 4)}`)
+    }
   }
 
   // 1) Investimentos (aplicação/resgate) não são gasto nem receita
@@ -703,6 +728,24 @@ export function consolidateMonth(
     })
   }
 
+  // parcelas que caem neste mês: as que o banco datou na compra (meses atrás) e as previstas que ainda não vieram
+  const installments: InstallmentItem[] = []
+  for (const t of hist) {
+    const eff = sched.effDate.get(t.id)
+    if (!eff || monthOf(eff) !== month || monthOf(t.date) === month) continue
+    const p = parseInstallment(t.description)
+    const id = `parcela:${t.id}`
+    items.push({ ...t, id, date: eff })
+    installments.push({ id, date: eff, description: t.description, account: t.account, cents: t.amountCents, n: p?.n ?? 0, of: p?.of ?? 0, kind: 'movida' })
+  }
+  for (const pr of sched.projected) {
+    if (monthOf(pr.date) !== month) continue
+    const id = `prevista:${pr.key}`
+    const description = `${pr.base} (parcela ${pr.n}/${pr.of}) · prevista`
+    items.push({ ...pr.source, id, date: pr.date, description, source: 'manual', importFileId: null })
+    installments.push({ id, date: pr.date, description, account: pr.source.account, cents: pr.source.amountCents, n: pr.n, of: pr.of, kind: 'prevista' })
+  }
+
   // você mandou contar: tira do "não conta" e volta o valor cheio (vale para qualquer motivo)
   const forcedIds: string[] = []
   for (let i = 0; i < items.length; i++) {
@@ -976,6 +1019,7 @@ export function consolidateMonth(
     month,
     dismissedCount: issues.filter((i) => dismissed.has(i.id)).length,
     forcedIds,
+    installments: installments.sort((a, b) => (a.date < b.date ? -1 : 1)),
     included,
     excluded: [...excluded.values()],
     totals: { incomeCents, expenseCents, netCents: incomeCents - expenseCents },

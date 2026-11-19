@@ -40,6 +40,7 @@ const EXCLUDED_LABEL: Record<ExcludedReason, string> = {
   casa: 'da casa — não conta no seu',
   valor_improvavel: 'valor improvável — confira',
   manual: 'você marcou: não conta',
+  parcela_outro_mes: 'parcela de outro mês',
 }
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
@@ -625,6 +626,33 @@ export function ExtratoPage() {
           </span>
           <span className="shrink-0 text-sm font-semibold tabular-nums">−{formatBRLFromCents(cons.result.plannedRent.cents)}</span>
         </Link>
+      ) : null}
+      {cons.result.installments.length && (chip === 'all' || chip === 'out') && !q ? (
+        <section className="space-y-2 rounded-[22px] border border-dashed border-border bg-surface px-4 py-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold">Parcelas deste mês · compras anteriores</h3>
+            <span className="text-sm font-semibold tabular-nums">−{formatBRLFromCents(cons.result.installments.reduce((s, i) => s + i.cents, 0))}</span>
+          </div>
+          <ul className="space-y-1 text-xs">
+            {cons.result.installments.map((i) => (
+              <li key={i.id} className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate">
+                  {i.date.slice(8, 10)}/{i.date.slice(5, 7)} · {i.description.replace(/\s*\(parcela.*$/i, '')}{' '}
+                  <span className="text-muted">
+                    · {i.n}/{i.of} · {i.account ?? 'cartão'}
+                  </span>
+                  {i.kind === 'prevista' ? (
+                    <span className="ml-1 rounded-full bg-[#fff6dc] px-1.5 py-px text-[10px] font-semibold text-[#7a5300] dark:bg-[#2d2612] dark:text-[#f5c451]">prevista</span>
+                  ) : null}
+                </span>
+                <span className="shrink-0 tabular-nums">−{formatBRLFromCents(i.cents)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] text-muted">
+            Já contam nas saídas do mês. As previstas viram o lançamento do banco quando a parcela entrar na fatura.
+          </p>
+        </section>
       ) : null}
       {loading ? <ListSkeleton rows={6} /> : null}
       {!loading && days.length === 0 ? (

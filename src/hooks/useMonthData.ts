@@ -66,7 +66,7 @@ export function useMonthData(month: string) {
     setLoading(true)
     setError(null)
     try {
-      const from = periods.rangeOf(shiftMonthKey(month, -6)).start
+      const from = periods.rangeOf(shiftMonthKey(month, -12)).start
       const to = range.end
       const [txs, batches, cats] = await Promise.all([
         fetchRange(user.id, from, to),
