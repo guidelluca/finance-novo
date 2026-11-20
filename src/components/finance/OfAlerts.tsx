@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useRecentTxs } from '@/hooks/useRecentTxs'
 import { OF_SYNC_EVENT, readAutoSync } from '@/lib/ofAutoSync'
 import { buildAlerts, checkBalances } from '@/lib/ofInsights'
-import { readBalanceSnapshots, readCardsCache, readConnections, readOverviewCache } from '@/lib/openFinance'
+import { readBalanceSnapshots, withLimitOverrides, readCardsCache, readConnections, readOverviewCache } from '@/lib/openFinance'
 import { rentMissingNow } from '@/lib/rentStatus'
 import { cn } from '@/lib/utils'
 
@@ -35,7 +35,10 @@ export function OfAlerts({ today, pace }: { today: string; pace: { deltaPct: num
     () =>
       buildAlerts({
         today,
-        cards: readCardsCache(),
+        cards: (() => {
+          const c = readCardsCache()
+          return c ? { ...c, cards: withLimitOverrides(c.cards, user) } : null
+        })(),
         overview: readOverviewCache(),
         txs,
         pace,

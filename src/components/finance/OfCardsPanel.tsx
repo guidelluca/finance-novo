@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatBRLFromCents } from '@/lib/currency'
-import { ofCards, readCardsCache, readConnections, readItemsUpdated, refreshFromBanks, splitCardUsage, type OfCard } from '@/lib/openFinance'
+import { ofCards, readCardsCache, readConnections, readItemsUpdated, refreshFromBanks, setLimitOverride, splitCardUsage, withLimitOverrides, type OfCard } from '@/lib/openFinance'
 import { cn } from '@/lib/utils'
 
 const BR = formatBRLFromCents
@@ -128,6 +128,8 @@ export function OfCardsPanel({ compact = false }: { compact?: boolean }) {
   const [progress, setProgress] = useState<string | null>(null)
   const [problems, setProblems] = useState<string[]>([])
   const [updatedAt, setUpdatedAt] = useState(() => readItemsUpdated())
+  const [editLimit, setEditLimit] = useState<string | null>(null)
+  const [limitInput, setLimitInput] = useState('')
 
   if (!conns.length) return null
 
@@ -150,10 +152,20 @@ export function OfCardsPanel({ compact = false }: { compact?: boolean }) {
       setProgress(null)
     }
   }
+  const saveLimit = async (accountId: string) => {
+    if (!user) return
+    const v = Math.round(Number(limitInput.replace(/\./g, '').replace(',', '.')) * 100)
+    try {
+      await setLimitOverride(user, accountId, Number.isFinite(v) && v > 0 ? v : null)
+      setEditLimit(null)
+    } catch (e) {
+      setErr((e as Error).message)
+    }
+  }
   const fmtAt = (iso?: string) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null)
 
   const today = data?.today ?? new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10)
-  const cards = (data?.cards ?? []).map((c) => ({ c, u: usageOf(c, today) }))
+  const cards = withLimitOverrides(data?.cards ?? [], user).map((c) => ({ c, u: usageOf(c, today) }))
   const total: Usage = cards.reduce<Usage>(
     (t, { u }) => ({
       used: t.used + u.used,
@@ -272,7 +284,57 @@ export function OfCardsPanel({ compact = false }: { compact?: boolean }) {
                       </span>
                     ) : null}
                     {c.minimumPaymentCents ? <span className="rounded-full bg-background px-2 py-1 text-muted">mínimo {BR0(c.minimumPaymentCents)} (evite)</span> : null}
+                    <button
+                      type="button"
+                      className="rounded-full border border-border px-2 py-1 font-semibold"
+                      onClick={() => {
+                        setEditLimit(editLimit === c.accountId ? null : c.accountId)
+                        setLimitInput(u.limit ? (u.limit / 100).toLocaleString('pt-BR') : '')
+                      }}
+                    >
+                      ajustar limite
+                    </button>
                   </div>
+                  {c.limitOverridden ? (
+                    <p className="text-[11px] text-muted">Limite informado por você ({BR(u.limit ?? 0)}). Vale até o banco mandar o valor novo.</p>
+                  ) : null}
+                  {editLimit === c.accountId ? (
+                    <form
+                      className="flex items-center gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        void saveLimit(c.accountId)
+                      }}
+                    >
+                      <input
+                        inputMode="decimal"
+                        autoFocus
+                        value={limitInput}
+                        onChange={(e) => setLimitInput(e.target.value)}
+                        placeholder="Ex.: 7.210"
+                        aria-label={`Limite do ${c.bank}`}
+                        className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm"
+                      />
+                      <button type="submit" className="h-10 rounded-xl bg-ink px-3 text-sm font-semibold text-[#f2f3ee]">
+                        Salvar
+                      </button>
+                      {c.limitOverridden ? (
+                        <button
+                          type="button"
+                          className="h-10 px-2 text-xs underline"
+                          onClick={() => {
+                            setLimitInput('')
+                            void (async () => {
+                              if (user) await setLimitOverride(user, c.accountId, null)
+                              setEditLimit(null)
+                            })()
+                          }}
+                        >
+                          usar o do banco
+                        </button>
+                      ) : null}
+                    </form>
+                  ) : null}
                 </li>
               )
             })}

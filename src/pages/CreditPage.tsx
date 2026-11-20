@@ -13,7 +13,7 @@ import { usePeriods } from '@/hooks/usePeriods'
 import { AdvicePanel } from '@/components/finance/AdvicePanel'
 import { cardLedger, creditHealth, incomeOf } from '@/lib/creditHealth'
 import { detectSubscriptions, projectInstallments } from '@/lib/ofInsights'
-import { readCardsCache } from '@/lib/openFinance'
+import { withLimitOverrides, readCardsCache } from '@/lib/openFinance'
 import type { AdviceInput } from '@/lib/spendingAdvice'
 import { analyzeMonth, cardName, creditMovements, cumulative, installmentOf, sumSigned, type Cat, type CreditRow } from '@/lib/creditAnalysis'
 import { formatBRLFromCents } from '@/lib/currency'
@@ -131,7 +131,10 @@ export function CreditPage() {
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
   })()
   const nextInst = useMemo(() => projectInstallments(rows, periods.today).find((m) => m.ym === nextYm)?.cents ?? 0, [rows, periods.today, nextYm])
-  const ofCards = useMemo(() => readCardsCache(), [tick]) // eslint-disable-line react-hooks/exhaustive-deps
+  const ofCards = useMemo(() => {
+    const c = readCardsCache()
+    return c ? { ...c, cards: withLimitOverrides(c.cards, user) } : null
+  }, [tick, user]) // eslint-disable-line react-hooks/exhaustive-deps
   const daysLeftHealth = Math.max(0, Math.round((Date.parse(`${periods.rangeOf(cur).end}T12:00:00Z`) - Date.parse(`${periods.today}T12:00:00Z`)) / 86_400_000) + 1)
   const health = creditHealth({
     spentCents: sumSigned(allCreditMonth),

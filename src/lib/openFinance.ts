@@ -462,3 +462,38 @@ export async function refreshFromBanks(
   }
   return { updated, problems }
 }
+
+/* ------------------------------------------------------------ limite ajustado à mão */
+
+/** Limite que você informou para um cartão, até o banco mandar o valor novo: { accountId: { cents, at } } */
+export type LimitOverrides = Record<string, { cents: number; at: string }>
+
+export function readLimitOverrides(user: User | null): LimitOverrides {
+  const v = user?.user_metadata?.card_limit_override
+  return v && typeof v === 'object' ? (v as LimitOverrides) : {}
+}
+
+export async function setLimitOverride(user: User, accountId: string, cents: number | null): Promise<void> {
+  const cur = { ...readLimitOverrides(user) }
+  if (cents && cents > 0) cur[accountId] = { cents, at: new Date().toISOString() }
+  else delete cur[accountId]
+  const { error } = await supabase.auth.updateUser({ data: { card_limit_override: cur } })
+  if (error) throw error
+}
+
+/**
+ * Usa o limite que você informou enquanto o banco não atualiza:
+ * vale até chegar um dado do banco mais novo que o ajuste (ou o banco já mostrar o mesmo valor).
+ */
+export function withLimitOverrides<T extends OfCard>(cards: T[], user: User | null): (T & { limitOverridden: boolean })[] {
+  const ov = readLimitOverrides(user)
+  const updated = readItemsUpdated()
+  return cards.map((c) => {
+    const o = ov[c.accountId]
+    const bankAt = updated[c.itemId]
+    const active = o && o.cents !== c.limitCents && (!bankAt || bankAt < o.at)
+    if (!active) return { ...c, limitOverridden: false }
+    const used = c.usedCents || (c.limitCents != null && c.availableCents != null ? c.limitCents - c.availableCents : 0)
+    return { ...c, limitCents: o.cents, availableCents: Math.max(0, o.cents - used), limitOverridden: true }
+  })
+}
