@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatBRLFromCents } from '@/lib/currency'
-import { ofCards, readCardsCache, readConnections, splitCardUsage, type OfCard } from '@/lib/openFinance'
+import { ofCards, readCardsCache, readConnections, readItemsUpdated, refreshFromBanks, splitCardUsage, type OfCard } from '@/lib/openFinance'
 import { cn } from '@/lib/utils'
 
 const BR = formatBRLFromCents
@@ -109,21 +109,32 @@ export function OfCardsPanel({ compact = false }: { compact?: boolean }) {
   const [data, setData] = useState(() => readCardsCache())
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [progress, setProgress] = useState<string | null>(null)
+  const [problems, setProblems] = useState<string[]>([])
+  const [updatedAt, setUpdatedAt] = useState(() => readItemsUpdated())
 
   if (!conns.length) return null
 
   async function refresh() {
     setBusy(true)
     setErr(null)
+    setProblems([])
     try {
+      // 1) pede ao banco os dados de agora (limite novo, fatura, compras) e espera; 2) lê
+      const rb = await refreshFromBanks(conns, setProgress)
+      setProblems(rb.problems)
+      setUpdatedAt(rb.updated)
+      setProgress('Lendo limites e faturas…')
       const r = await ofCards(conns)
       setData({ at: new Date().toISOString(), ...r })
     } catch (e) {
       setErr((e as Error).message)
     } finally {
       setBusy(false)
+      setProgress(null)
     }
   }
+  const fmtAt = (iso?: string) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null)
 
   const today = data?.today ?? new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10)
   const cards = (data?.cards ?? []).map((c) => ({ c, u: usageOf(c, today) }))
@@ -159,7 +170,15 @@ export function OfCardsPanel({ compact = false }: { compact?: boolean }) {
           {data ? 'Atualizar' : 'Buscar nos bancos'}
         </button>
       </div>
+      {progress ? <p className="text-xs text-muted">{progress}</p> : null}
       {err ? <p className="rounded-2xl border border-danger/40 bg-danger/10 p-2.5 text-xs text-danger">{err}</p> : null}
+      {problems.length ? (
+        <ul className="space-y-1 rounded-2xl border border-border bg-surface p-2.5 text-xs">
+          {problems.map((p, i) => (
+            <li key={i}>{p}</li>
+          ))}
+        </ul>
+      ) : null}
 
       {!data ? (
         <p className="rounded-2xl border border-border bg-surface p-3 text-xs text-muted">
@@ -207,7 +226,10 @@ export function OfCardsPanel({ compact = false }: { compact?: boolean }) {
                         {c.bank}
                         {c.number ? <span className="font-normal text-muted"> •{String(c.number).replace(/\D/g, '').slice(-4)}</span> : null}
                       </p>
-                      <p className="truncate text-xs text-muted">{c.name}</p>
+                      <p className="truncate text-xs text-muted">
+                        {c.name}
+                        {fmtAt(updatedAt[c.itemId]) ? ` · dados do banco de ${fmtAt(updatedAt[c.itemId])}` : ''}
+                      </p>
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-[11px] text-muted">fatura do mês</p>

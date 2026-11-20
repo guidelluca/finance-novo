@@ -380,3 +380,53 @@ export async function addOfCoverage(user: User, labels: string[], from: string, 
   for (const l of labels) next[l] = mergeRanges([...(cur[l] ?? []), { from, to }]).slice(-12)
   await supabase.auth.updateUser({ data: { of_coverage: next } }).catch(() => undefined)
 }
+
+/* ------------------------------------------------------------ pedir dados novos ao banco */
+
+const BUSY = /UPDATING|LOGIN_IN_PROGRESS|WAITING_USER_INPUT|CREATING/i
+const ITEMS_KEY = 'finance:of-items-updated'
+
+export function readItemsUpdated(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(ITEMS_KEY) ?? '{}') as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Pede para cada banco mandar os dados de agora (limite, fatura, lançamentos) e espera terminar.
+ * Sem isso o app lê o que a Pluggy já tinha guardado (o Meu Pluggy atualiza sozinho ~1×/dia).
+ */
+export async function refreshFromBanks(
+  conns: OfConnection[],
+  onProgress?: (text: string) => void,
+): Promise<{ updated: Record<string, string>; problems: string[] }> {
+  const ids = conns.map((c) => c.itemId)
+  const bank = new Map(conns.map((c) => [c.itemId, c.bank]))
+  const problems: string[] = []
+  onProgress?.('Pedindo dados novos aos bancos…')
+  const r = await ofRefresh(ids).catch((e: Error) => ({ items: ids.map((id) => ({ id, ok: false, status: null, message: e.message })) }))
+  for (const it of r.items) if (!it.ok) problems.push(`${bank.get(it.id) ?? 'Banco'}: o banco não aceitou atualizar agora (${it.message ?? 'sem motivo'}).`)
+  const started = Date.now()
+  let last: OfItemStatus[] = []
+  while (Date.now() - started < 120_000) {
+    await new Promise((res) => setTimeout(res, 5000))
+    last = (await ofStatus(ids).catch(() => ({ items: [] as OfItemStatus[] }))).items
+    const busy = last.filter((i) => BUSY.test(i.status ?? '') || BUSY.test(i.executionStatus ?? ''))
+    onProgress?.(busy.length ? `Atualizando ${busy.map((i) => bank.get(i.id) ?? 'banco').join(', ')}… ${Math.round((Date.now() - started) / 1000)}s` : 'Bancos atualizados')
+    if (!busy.length) break
+  }
+  const updated: Record<string, string> = { ...readItemsUpdated() }
+  for (const i of last) {
+    if (i.lastUpdatedAt) updated[i.id] = i.lastUpdatedAt
+    if (/LOGIN_ERROR|OUTDATED|ERROR/i.test(i.status ?? '')) problems.push(`${bank.get(i.id) ?? 'Banco'}: a conexão precisa ser refeita no Meu Pluggy (${i.status}).`)
+    if (BUSY.test(i.status ?? '')) problems.push(`${bank.get(i.id) ?? 'Banco'}: ainda atualizando, tente de novo em alguns minutos.`)
+  }
+  try {
+    localStorage.setItem(ITEMS_KEY, JSON.stringify(updated))
+  } catch {
+    /* sem armazenamento */
+  }
+  return { updated, problems }
+}

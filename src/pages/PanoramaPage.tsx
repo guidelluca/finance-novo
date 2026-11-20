@@ -8,7 +8,7 @@ import { useRecentTxs } from '@/hooks/useRecentTxs'
 import { formatBRLFromCents } from '@/lib/currency'
 import { autoSync, OF_SYNC_EVENT, readAutoSync } from '@/lib/ofAutoSync'
 import { checkBalances, debtsFromTxs, detectSubscriptions, netWorth } from '@/lib/ofInsights'
-import { readBalanceSnapshots, readCardsCache, readConnections, readOverviewCache } from '@/lib/openFinance'
+import { readBalanceSnapshots, readCardsCache, readConnections, readOverviewCache, refreshFromBanks } from '@/lib/openFinance'
 import { cn } from '@/lib/utils'
 
 const BR = formatBRLFromCents
@@ -58,7 +58,9 @@ export function PanoramaPage() {
     if (!user) return
     setBusy(true)
     setErr(null)
+    const rb = await refreshFromBanks(conns).catch(() => ({ problems: [] as string[] }))
     const r = await autoSync(user, { force: true })
+    if (rb.problems.length) setErr(rb.problems.join(' '))
     if (r?.error) setErr(r.error)
     setBusy(false)
   }
