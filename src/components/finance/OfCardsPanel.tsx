@@ -9,6 +9,22 @@ import { cn } from '@/lib/utils'
 const BR = formatBRLFromCents
 const BR0 = (c: number) => formatBRLFromCents(c).replace(/,\d{2}$/, '')
 const br = (iso: string | null) => (iso ? iso.slice(5, 10).split('-').reverse().join('/') : '—')
+/** O banco às vezes manda o vencimento da fatura passada: estima o próximo (mesmo dia, mês seguinte). */
+function nextMonthly(iso: string, today: string): string {
+  let [y, m] = iso.split('-').map(Number) as [number, number]
+  const d = Number(iso.slice(8, 10))
+  let out = iso
+  while (out < today) {
+    m += 1
+    if (m > 12) {
+      m = 1
+      y += 1
+    }
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
+    out = `${y}-${String(m).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`
+  }
+  return out
+}
 const pct = (v: number, of: number) => (of > 0 ? Math.round((v / of) * 100) : 0)
 
 /** As 3 partes do limite usado + o que sobra. Cores fixas (mesma parte = mesma cor em todos os cartões). */
@@ -239,8 +255,12 @@ export function OfCardsPanel({ compact = false }: { compact?: boolean }) {
                   <LimitBar u={u} />
                   {!compact ? <Legend u={u} /> : null}
                   <div className="flex flex-wrap gap-1.5 text-[11px]">
-                    <span className="rounded-full bg-background px-2 py-1">fecha {br(c.closeDate)}</span>
-                    <span className="rounded-full bg-background px-2 py-1">vence {br(c.dueDate)}</span>
+                    {c.closeDate ? <span className="rounded-full bg-background px-2 py-1">fecha {br(c.closeDate)}</span> : null}
+                    {c.dueDate ? (
+                      <span className="rounded-full bg-background px-2 py-1">
+                        {c.dueDate >= today ? `vence ${br(c.dueDate)}` : `próximo vencimento ~${br(nextMonthly(c.dueDate, today))}`}
+                      </span>
+                    ) : null}
                     {used != null ? (
                       <span
                         className={cn(

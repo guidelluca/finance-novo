@@ -405,9 +405,41 @@ export async function refreshFromBanks(
   const ids = conns.map((c) => c.itemId)
   const bank = new Map(conns.map((c) => [c.itemId, c.bank]))
   const problems: string[] = []
-  onProgress?.('Pedindo dados novos aos bancos…')
-  const r = await ofRefresh(ids).catch((e: Error) => ({ items: ids.map((id) => ({ id, ok: false, status: null, message: e.message })) }))
-  for (const it of r.items) if (!it.ok) problems.push(`${bank.get(it.id) ?? 'Banco'}: o banco não aceitou atualizar agora (${it.message ?? 'sem motivo'}).`)
+  // o Meu Pluggy não deixa pedir atualização manual (ele mesmo atualiza ~1×/dia): aí só lê a data dos dados
+  let noManual = false
+  try {
+    noManual = localStorage.getItem('finance:of-no-manual-refresh') === '1'
+  } catch {
+    /* sem armazenamento */
+  }
+  if (!noManual) {
+    onProgress?.('Pedindo dados novos aos bancos…')
+    const r = await ofRefresh(ids).catch((e: Error) => ({ items: ids.map((id) => ({ id, ok: false, status: null, message: e.message })) }))
+    const refused = r.items.filter((it) => !it.ok)
+    noManual = refused.length === r.items.length && refused.every((it) => /cant be updated|can't be updated|meupluggy/i.test(it.message ?? ''))
+    if (noManual) {
+      try {
+        localStorage.setItem('finance:of-no-manual-refresh', '1')
+      } catch {
+        /* sem armazenamento */
+      }
+    } else for (const it of refused) problems.push(`${bank.get(it.id) ?? 'Banco'}: o banco não aceitou atualizar agora (${it.message ?? 'sem motivo'}).`)
+  }
+  if (noManual) {
+    const st = (await ofStatus(ids).catch(() => ({ items: [] as OfItemStatus[] }))).items
+    const updated: Record<string, string> = { ...readItemsUpdated() }
+    for (const i of st) if (i.lastUpdatedAt) updated[i.id] = i.lastUpdatedAt
+    try {
+      localStorage.setItem(ITEMS_KEY, JSON.stringify(updated))
+    } catch {
+      /* sem armazenamento */
+    }
+    const newest = st.map((i) => i.lastUpdatedAt).filter(Boolean).sort().pop()
+    problems.push(
+      `O Meu Pluggy não deixa o app pedir dados novos: ele mesmo busca nos bancos cerca de 1 vez por dia${newest ? ` (última: ${new Date(newest).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})` : ''}. Mudanças como limite novo aparecem depois dessa busca.`,
+    )
+    return { updated, problems }
+  }
   const started = Date.now()
   let last: OfItemStatus[] = []
   while (Date.now() - started < 120_000) {
