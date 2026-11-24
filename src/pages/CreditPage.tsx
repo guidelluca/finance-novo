@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useChartTheme } from '@/hooks/useChartTheme'
 import { useCountUp } from '@/hooks/useCountUp'
 import { usePeriods } from '@/hooks/usePeriods'
+import { BillSchedule } from '@/components/finance/BillSchedule'
 import { AdvicePanel } from '@/components/finance/AdvicePanel'
 import { cardLedger, creditHealth, incomeOf } from '@/lib/creditHealth'
 import { detectSubscriptions, projectInstallments } from '@/lib/ofInsights'
@@ -378,6 +379,8 @@ export function CreditPage() {
               Referências: faturas e dívidas até 30% da renda líquida; limite usado até 30%; nunca pagar só o mínimo (o rotativo passa de 400% ao ano).
             </p>
           </Panel>
+
+          <BillSchedule />
 
           {ledger.length ? (
             <Panel icon={Wallet} title="Faturas: todos os cartões">

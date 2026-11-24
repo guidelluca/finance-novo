@@ -2,6 +2,7 @@ import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { CreditCard as CardIcon, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { BillSchedule } from '@/components/finance/BillSchedule'
 import { FutureInstallments } from '@/components/finance/FutureInstallments'
 import { OfCardsPanel } from '@/components/finance/OfCardsPanel'
 import { useRecentTxs } from '@/hooks/useRecentTxs'
@@ -232,6 +233,7 @@ export function CardsPage() {
         Análise do gasto no crédito: ritmo, categorias, parcelas e lojas <span aria-hidden>→</span>
       </Link>
       <OfCardsPanel />
+      <BillSchedule />
       <FutureInstallments txs={recentTxs} today={new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10)} />
 
       {showForm ? (
