@@ -1,3 +1,4 @@
+import { isCardPaymentCredit } from '@/lib/cardPayment'
 import { parseInstallment, scheduleInstallments } from '@/lib/installmentSchedule'
 
 /**
@@ -10,7 +11,6 @@ export type DueRule = { kind: 'dia'; day: number; closeDaysBefore: number } | { 
 export type BillTx = { id: string; date: string; amount_cents: number; kind: 'debit' | 'credit'; description_raw: string; account: string | null }
 
 const CARD = /^cart[aã]o\b|cr[eé]dito/i
-const PAYMENT = /pagamento|pgto|pagto|fatura paga/i
 const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 
 /** Regras que você contou: Itaú vence no último dia útil; Inter e PicPay no dia 15. */
@@ -72,8 +72,8 @@ export function billSchedule(rows: BillTx[], rules: Record<string, DueRule>, tod
     const rule = rules[card] ?? defaultRule(card)
     if (!rule) continue
     const mine = cardRows.filter((t) => t.account === card)
-    const payments = mine.filter((t) => t.kind === 'credit' && PAYMENT.test(t.description_raw))
-    const spend = mine.filter((t) => !(t.kind === 'credit' && PAYMENT.test(t.description_raw)))
+    const payments = mine.filter((t) => t.kind === 'credit' && isCardPaymentCredit(t.description_raw))
+    const spend = mine.filter((t) => !(t.kind === 'credit' && isCardPaymentCredit(t.description_raw)))
     const proj = sched.projected.filter((p) => p.source.account === card)
     // primeiro vencimento que ainda não passou (com folga de 3 dias para o pagamento entrar)
     let ym = today.slice(0, 7)

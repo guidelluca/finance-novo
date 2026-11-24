@@ -1,3 +1,4 @@
+import { isCardPaymentCredit } from '@/lib/cardPayment'
 import { identifyMerchant } from '@/lib/merchantIdentify'
 
 /** Lançamento salvo com o que a análise de crédito precisa. */
@@ -14,7 +15,6 @@ export type CreditRow = {
 export type Cat = { id: string; name: string; parent_id: string | null }
 
 const CARD_ACCOUNT = /^cart[aã]o\b/i
-const PAYMENT = /pagamento|pgto|pagto|fatura paga|pag\.? fatura/i
 export const PARC = /(?:parcela\s*(\d{1,2})\s*\/\s*(\d{1,2}))|(?:parc\s*(\d{1,2})\s*\/\s*(\d{1,2}))/i
 
 export const isCreditRow = (t: CreditRow) => Boolean(t.credit_card_id) || CARD_ACCOUNT.test(t.account ?? '')
@@ -22,7 +22,7 @@ export const cardName = (t: CreditRow) => (t.account ?? 'Cartão').replace(/^car
 
 /** Compras (débitos) e estornos do cartão; pagamento da fatura não é gasto e sai. */
 export function creditMovements(rows: CreditRow[]): CreditRow[] {
-  return rows.filter((t) => isCreditRow(t) && !(t.kind === 'credit' && PAYMENT.test(t.description_raw)))
+  return rows.filter((t) => isCreditRow(t) && !(t.kind === 'credit' && isCardPaymentCredit(t.description_raw)))
 }
 const signed = (t: CreditRow) => (t.kind === 'debit' ? t.amount_cents : -t.amount_cents)
 

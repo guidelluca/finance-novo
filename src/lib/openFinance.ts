@@ -3,6 +3,7 @@
  * e transforma as transações em lançamentos para a mesma revisão da importação de arquivos.
  * Conexões (itemId + banco) ficam no user_metadata; o itemId sozinho não dá acesso a nada sem a chave.
  */
+import { isCardPaymentCredit } from '@/lib/cardPayment'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import type { TransactionDraft } from '@/parsers/types'
@@ -108,7 +109,6 @@ export function pluggyTag(cat: string | null | undefined, desc: string, isCard: 
   return ''
 }
 
-const PAYMENT = /pagamento (recebido|de fatura|fatura)|pgto fatura|pagto fatura|pag fatura/i
 
 /** Busca as transações das conexões e devolve lançamentos prontos para revisão. */
 export async function fetchOpenFinanceDrafts(
@@ -171,7 +171,7 @@ export async function fetchOpenFinanceDrafts(
       const desc = base + pluggyTag(t.category, base, isCard) + (t.status === 'PENDING' ? PENDING_TAG : '')
       const kind = t.type === 'CREDIT' ? 'credit' : 'debit'
       // no cartão, "pagamento recebido" é a fatura paga pela conta: já aparece no extrato do banco
-      const cardPayment = isCard && kind === 'credit' && PAYMENT.test(desc)
+      const cardPayment = isCard && kind === 'credit' && isCardPaymentCredit(desc, t.category)
       if (t.status === 'PENDING') pending += 1
       drafts.push({
         tempId: `of-${t.id}`,

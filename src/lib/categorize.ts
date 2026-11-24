@@ -82,10 +82,14 @@ export function suggestCategory(
   const learned = usable.filter((r) => r.priority >= LEARNED_PRIORITY)
   const general = usable.filter((r) => r.priority < LEARNED_PRIORITY)
   t = { ...t, description: stripWallet(t.description) || t.description }
-  const r1 = suggestCategoryId(t.description, learned)
-  if (r1) return { categoryId: r1, source: 'regra' }
   const m = identifyMerchant(t.description)
   const r2 = pickCategoryId(m.categories, ctx.categories)
+  // estabelecimento reconhecido (Uber, 99, iFood, farmácia…): só uma regra sua que cita esse nome passa por cima.
+  // Assim uma regra aprendida genérica (ex.: "sao paulo") não joga Uber em Lanche.
+  const brand = norm(m.name).split(/[^a-z0-9]+/).find((w) => w.length >= 2) ?? ''
+  const learnedHere = r2 && brand ? learned.filter((r) => norm(r.pattern).includes(brand)) : learned
+  const r1 = suggestCategoryId(t.description, learnedHere)
+  if (r1) return { categoryId: r1, source: 'regra' }
   if (r2) return { categoryId: r2, source: 'estabelecimento' }
   // categoria do Open Finance (Pluggy): classifica pelo estabelecimento real, melhor que o texto cru
   const rOf = pluggyCategoryId(t.ofCategory, ctx.categories)
@@ -259,7 +263,7 @@ export async function fixWalletCategories(userId: string): Promise<{ fixed: numb
           // farmácia e beleza → Auto cuidado
           '%drogaria%', '%farmacia%', '%raia%', '%drogasil%', '%pacheco%', '%panvel%', '%boticario%', '%natura%', '%sephora%', '%cosmet%', '%perfum%', '%beleza%',
           // Uber/99 que caíram fora de transporte
-          '%uber%', '%99%pop%', '%99app%', '%99 tecnologia%',
+          '%uber%', '%99%pop%', '%99app%', '%99 tecnologia%', '%99*%', '%99food%',
         ]
           .map((p) => `description_raw.ilike.${p}`)
           .join(','),

@@ -1,3 +1,4 @@
+import { isCardPaymentCredit } from '@/lib/cardPayment'
 import { cardName, installmentOf, isCreditRow, type CreditRow } from '@/lib/creditAnalysis'
 import { projectInstallments } from '@/lib/ofInsights'
 import { splitCardUsage, type OfCard } from '@/lib/openFinance'
@@ -14,7 +15,6 @@ export const WARN_CREDIT_PCT = 0.4
 const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 const SALARY = /sal[aá]rio|remunera[cç][aã]o|folha de pag|pagto\.? sal|\bplr\b|participa[cç][aã]o nos lucros|13[ºo]? sal|f[eé]rias/i
 const CARD_PAY_BANK = /fatura paga|pagamento (de |da )?fatura|pgto\.? ?fatura|pag(to|amento)? (de )?cart[aã]o|pagamento de fatura/i
-const CARD_PAY_CARD = /pagamento (recebido|de fatura|da fatura|efetuado)|pgto|pagto|fatura paga|pagamento on ?line/i
 
 const ISSUERS: [RegExp, string][] = [
   [/ita[uú]|itaucard/, 'itau'],
@@ -60,7 +60,7 @@ export function cardLedger(input: {
       const inst = mine.filter((t) => t.kind === 'debit' && installmentOf(t.description_raw)).reduce((s, t) => s + t.amount_cents, 0)
       // pago: o "pagamento recebido" lançado no próprio cartão; se não tiver, o débito "pagamento de fatura" da conta
       const cardSide = input.monthAll
-        .filter((t) => isCreditRow(t) && cardName(t) === card && t.kind === 'credit' && CARD_PAY_CARD.test(t.description_raw))
+        .filter((t) => isCreditRow(t) && cardName(t) === card && t.kind === 'credit' && isCardPaymentCredit(t.description_raw))
         .reduce((s, t) => s + t.amount_cents, 0)
       const iss = issuerOf(card)
       const bankSide = input.monthAll

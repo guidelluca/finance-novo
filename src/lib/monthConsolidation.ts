@@ -6,6 +6,7 @@
  * Sem dependências externas (testável isoladamente). Nada é apagado aqui: só classifica.
  */
 import { classifyHouse, residentOf, selfResident, type HouseConfig } from '@/lib/house'
+import { isCardPaymentCredit } from '@/lib/cardPayment'
 import { parseInstallment, scheduleInstallments } from '@/lib/installmentSchedule'
 import { sheetTabForPayment, tabToYm, type SheetResident } from '@/lib/houseSheet'
 import { identifyMerchant } from './merchantIdentify'
@@ -512,7 +513,7 @@ export function consolidateMonth(
   //    registra um "pagamento recebido" do mesmo valor em até 3 dias, é pagamento daquele cartão, não gasto.
   const payIssuer = new Map<string, Issuer>()
   {
-    const cardCredits = [...items, ...hist].filter((c) => isCard(c) && c.kind === 'credit' && /pagamento|pgto|pagto|fatura/i.test(c.description))
+    const cardCredits = [...items, ...hist].filter((c) => isCard(c) && c.kind === 'credit' && isCardPaymentCredit(c.description))
     const usedCredit = new Set<string>()
     const near = (a: string, b: string) => Math.abs(dayDiff(a, b)) <= 3
     for (const t of items) {
@@ -534,7 +535,7 @@ export function consolidateMonth(
   }
   // o "pagamento recebido" do lado do cartão não é estorno nem renda: é o mesmo dinheiro do pagamento da conta
   for (const t of items) {
-    if (isCard(t) && t.kind === 'credit' && !excluded.has(t.id) && /pagamento (recebido|de fatura|da fatura|efetuado)|pgto|pagto|fatura paga|pagamento on ?line/i.test(t.description))
+    if (isCard(t) && t.kind === 'credit' && !excluded.has(t.id) && isCardPaymentCredit(t.description))
       exclude(t, 'pagamento_fatura', 'Pagamento da fatura registrado no cartão (o dinheiro saiu da conta)')
   }
   const faturaChecks: FaturaCheck[] = []

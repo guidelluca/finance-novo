@@ -62,10 +62,10 @@ export function AppShell() {
         }
         // uma vez: conserta compras com Apple Pay que caíram em categoria errada
         const wk = `finance:wallet-fix-v2:${user.id}`
-        if (!user.user_metadata?.wallet_fix_v2 && !sessionStorage.getItem(wk)) {
+        if (!user.user_metadata?.wallet_fix_v3 && !sessionStorage.getItem(wk)) {
           sessionStorage.setItem(wk, '1')
           const w = await fixWalletCategories(user.id)
-          await supabase.auth.updateUser({ data: { wallet_fix_v2: true } })
+          await supabase.auth.updateUser({ data: { wallet_fix_v3: true } })
           if (w.fixed) window.dispatchEvent(new CustomEvent('finance:recategorized', { detail: w }))
         }
       } catch (e) {
